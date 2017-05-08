@@ -8,12 +8,12 @@
     <copyright>&#xa9; 2017 Anton Tykhyy</copyright>
     <licenseUrl>http://opensource.org/licenses/mit-license.php</licenseUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <projectUrl>http://github.com/atykhyy/cecil/</projectUrl>
+    <projectUrl>http://github.com/atykhyy/compiled-templates/</projectUrl>
     <summary>CIL compiled templates library (Cecil target)</summary>
     <description>
       CIL compiled templates library (Cecil target)
     </description>
-    <tags>assembly assemblies module modules il cil msil bytecode reflection injection cecil mono aop postcompile weaving template templates</tags>
+    <tags>assembly assemblies module modules il cil msil bytecode reflection injection cecil aop postcompile weaving template templates</tags>
     <dependencies>
       <dependency id="System.Collections.Immutable" version="1.1" />
     </dependencies>

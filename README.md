@@ -6,8 +6,9 @@ Emitting IL directly is very powerful, but being a low-level approach, it suffer
 from the usual problems of low-level approaches:
 
 1) syntactic bloat: difficult to see at a glance what the emitted code is doing
-2) you have to do the compiler's work in importing members and constructing generics by hand
+2) you have to do the compiler's work in importing members, resolving overloads and constructing generics by hand
 3) impossible to step through the emitted code and run code coverage on it
+4) IDE integration (e.g. find all references) does not work
 
 Compiled templates solve all these problems. Instead of a rat's nest of opcodes,
 the compiled templates library generates your emitted code from normal C# code

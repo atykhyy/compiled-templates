@@ -6,5 +6,6 @@ obj
 *.userprefs
 *.nupkg
 **/test-results/*
+packages
 TestResults
 .vs/
