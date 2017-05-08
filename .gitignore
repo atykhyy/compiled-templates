@@ -1,0 +1,10 @@
+bin
+obj
+*.snk
+*.suo
+*.user
+*.userprefs
+*.nupkg
+**/test-results/*
+TestResults
+.vs/

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition="Exists('CompiledTemplates.snk')">
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)CompiledTemplates.snk</AssemblyOriginatorKeyFile>
+    <DefineConstants>$(DefineConstants);STRONGNAME</DefineConstants>
+  </PropertyGroup>
+  <Import Project="SharedBuildProperties.props.user" Condition="Exists('SharedBuildProperties.props.user')" />
+  <Target Name="VersionInject" BeforeTargets="PrepareForBuild"
+    Condition=" '$(Configuration)' == 'Release' And !$(DefineConstants.Contains('NOASSEMBLYVERSION')) ">
+
+    <!-- get revision number -->
+    <Exec Command="hg.exe log -l 1 ." ConsoleToMSBuild="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="AVI_HgLog" />
+    </Exec>
+    <!-- get old version string -->
+    <ReadLinesFromFile File="Properties\AssemblyInfoVersion.cs">
+      <Output TaskParameter="Lines" PropertyName="AVI_Old"/>  
+    </ReadLinesFromFile>
+    <!-- get base version number and construct new version string -->
+    <XmlPeek XmlInputPath="$(SolutionDir)NuGet\$(MSBuildProjectName).nuspec" Query="/package/metadata/version/text()">
+      <Output TaskParameter="Result" PropertyName="AVI_Ver" />
+    </XmlPeek>
+    <PropertyGroup>
+      <AVI_Idx>$([MSBuild]::Add($(AVI_HgLog.IndexOf(':')),1))</AVI_Idx>
+      <AVI_HgId>$(AVI_HgLog.Substring($(AVI_Idx),$([MSBuild]::Subtract($(AVI_HgLog.IndexOf(';')),$(AVI_Idx)))).Trim())</AVI_HgId>
+      <AVI_Idx>$(AVI_HgId.IndexOf(':'))</AVI_Idx>
+      <AVI_Ver>$(AVI_Ver).$(AVI_HgId.Substring(0,$(AVI_Idx)))</AVI_Ver>
+      <AVI_Commit>$(AVI_HgId.Substring($(AVI_Idx)).Trim(':'))</AVI_Commit>
+      <AVI_New>[assembly:System.Reflection.AssemblyFileVersion(&quot;$(AVI_Ver)&quot;),<!--
+                      -->System.Reflection.AssemblyInformationalVersion(&quot;$(AVI_Ver), commit $(AVI_Commit)&quot;)]</AVI_New>
+    </PropertyGroup>
+    <!-- rewrite version file if version changed -->
+    <WriteLinesToFile File="Properties\AssemblyInfoVersion.cs" Overwrite="true" Lines="$(AVI_New)"
+      Condition=" '$(AVI_Old)' != '$(AVI_New)' " />
+    <!-- create the item dynamically to prevent spurious rebuilds -->
+    <ItemGroup>
+      <Compile Include="Properties\AssemblyInfoVersion.cs" />
+    </ItemGroup>
+  </Target>
+</Project>
