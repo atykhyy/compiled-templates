@@ -98,6 +98,22 @@ namespace Cil.CompiledTemplates.Cecil
     public static class CecilExtensions
     {
         #region --[Methods: Extensions]-----------------------------------
+        public static AssemblyName ToAssemblyName (this AssemblyNameReference name)
+        {
+            var result = new AssemblyName
+            {
+                Name          = name.Name,
+                Version       = name.Version,
+                CultureInfo   = System.Globalization.CultureInfo.GetCultureInfo (name.Culture),
+                HashAlgorithm = (System.Configuration.Assemblies.AssemblyHashAlgorithm) name.HashAlgorithm,
+            } ;
+
+            if (name.HasPublicKey)
+                result.SetPublicKeyToken (name.PublicKeyToken) ;
+
+            return result ;
+        }
+
         public static FieldReference ImportField<T> (this ModuleDefinition module, Expression<Func<T>> expr)
         {
             var field = (FieldInfo)((MemberExpression)expr.Body).Member ;

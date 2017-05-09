@@ -96,7 +96,7 @@ namespace Cil.CompiledTemplates.Cecil
         #region --[Constructors]------------------------------------------
         public TemplateContext (Type template, TypeDefinition target)
         {
-            if (template.IsGenericType)
+            if (template.IsGenericType || target.HasGenericParameters)
             {
                 // TODO: implementing generic templates (i.e. one creating generic
                 // methods, not gratuitously generic as I had at first) will require
@@ -113,15 +113,11 @@ namespace Cil.CompiledTemplates.Cecil
             ModuleDefinition module ;
             if(!s_modules.TryGetValue (template.Assembly, out module))
             {
-                // TODO: is this the right way to handle assembly resolution?
-                var ar = new DefaultAssemblyResolver () ;
-                ar.AddSearchDirectory (System.IO.Path.GetDirectoryName (template.Assembly.Location)) ;
-
                 module = ModuleDefinition.ReadModule (template.Assembly.Location, new ReaderParameters
                 {
                     ReadingMode      = ReadingMode.Deferred,
                     ReadSymbols      = true,
-                    AssemblyResolver = ar,
+                    AssemblyResolver = AppDomainAssemblyResolver.Instance,
                 }) ;
 
                 s_modules.Add (template.Assembly, module) ;
@@ -528,15 +524,21 @@ namespace Cil.CompiledTemplates.Cecil
             CopyMethod (d.Method, attribs) ;
         }
 
-        public MethodDefinition CopyMethod_ (Expression<Action> expr, Mono.Cecil.MethodAttributes? attribs = null)
+        public void CopyMethod_ (Expression<Action> expr, Mono.Cecil.MethodAttributes? attribs = null)
         {
             var fex  = expr.Body as MethodCallExpression ;
             if (fex != null)
-                return CopyMethod (fex.Method, attribs, fex.Object?.Type) ;
+            {
+                CopyMethod (fex.Method, attribs, fex.Object?.Type) ;
+                return ;
+            }
 
             var nex  = expr.Body as NewExpression ;
             if (nex != null)
-                return CopyMethod (nex.Constructor, attribs) ;
+            {
+                CopyMethod (nex.Constructor, attribs) ;
+                return ;
+            }
 
             throw new ArgumentOutOfRangeException ("expr") ;
         }
@@ -560,9 +562,10 @@ namespace Cil.CompiledTemplates.Cecil
             CopyMethod (((PropertyInfo) mex.Member).GetSetMethod (), attribs, mex.Expression?.Type) ;
         }
 
-        private MethodDefinition CopyMethod (MethodBase method, Mono.Cecil.MethodAttributes? attribs, Type source = null)
+        private void CopyMethod (MethodBase method, Mono.Cecil.MethodAttributes? attribs, Type source = null)
         {
-            return CopyMethod (GetMethodInType (method, source), attribs) ;
+            // XXX: use SR attributes instead?
+            CopyMethod (GetMethodInType (method, source), attribs) ;
         }
         #endregion
 
@@ -902,6 +905,7 @@ namespace Cil.CompiledTemplates.Cecil
             // so it's basically just a list of locals in the pdb
             // maybe they are meaningful if there are iterators or async methods,
             // but I can't yet handle these
+            // TODO: how to handle EmitName'd members in debugger?
         }
 
         private Tuple<MethodDefinition, MethodDefinition, MethodReference, Dictionary<object, object>> CreateMethodBuilder (
