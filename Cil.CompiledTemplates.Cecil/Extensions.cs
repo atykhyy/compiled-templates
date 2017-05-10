@@ -46,6 +46,16 @@ namespace Cil.CompiledTemplates.Cecil
             return result ;
         }
 
+        public static Type GetReturnType (this MethodBase member)
+        {
+            var method  = member as MethodInfo ;
+            if (method != null)
+                return method.ReturnType ;
+
+            // for constructors
+            return typeof (void) ;
+        }
+
         /// <summary>
         /// Gets the type's full name in pseudo-C# syntax.
         /// </summary>
