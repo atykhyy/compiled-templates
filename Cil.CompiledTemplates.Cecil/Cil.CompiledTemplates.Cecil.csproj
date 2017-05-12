@@ -67,7 +67,6 @@
     <Compile Include="..\SharedAssemblyInfo.cs">
       <Link>Properties\SharedAssemblyInfo.cs</Link>
     </Compile>
-    <Compile Include="AppDomainAssemblyResolver.cs" />
     <Compile Include="Attributes.cs" />
     <Compile Include="Extensions.cs" />
     <Compile Include="ILBranchManager.cs" />
