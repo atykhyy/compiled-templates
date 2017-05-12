@@ -22,69 +22,71 @@ namespace Cil.CompiledTemplates.Cecil
 {
     sealed class Scope
     {
-        public Instruction Start  ;
-        public Instruction End    ;
-        public List<Scope> Scopes ;
+        #region --[Fields: Private]---------------------------------------
+        private Instruction m_start  ;
+        private Instruction m_end    ;
+        private List<Scope> m_scopes ;
 
-        public List<VariableDebugInformation> Variables ;
+        private List<VariableDebugInformation> m_variables ;
+        #endregion
 
         public Scope (Instruction start, Instruction end)
         {
-            Start = start ;
-            End   = end   ;
+            m_start = start ;
+            m_end   = end   ;
         }
 
         public Scope (ScopeDebugInformation scope, Dictionary<int, Instruction> insns)
         {
-            insns.TryGetValue (scope.Start.Offset, out Start) ;
-            insns.TryGetValue (scope.End.Offset,   out End)   ;
+            insns.TryGetValue (scope.Start.Offset, out m_start) ;
+            insns.TryGetValue (scope.End.Offset,   out m_end)   ;
 
-            Variables = new List<VariableDebugInformation> (scope.Variables) ;
+            m_variables = new List<VariableDebugInformation> (scope.Variables) ;
 
             foreach (var s in scope.Scopes)
             {
-                if (Scopes  == null)
-                    Scopes   = new List<Scope> () ;
+                if (m_scopes  == null)
+                    m_scopes   = new List<Scope> () ;
 
-                Scopes.Add (new Scope (s, insns)) ;
+                m_scopes.Add (new Scope (s, insns)) ;
             }
         }
 
         public Scope (ISymbolScope scope, VariableDefinition[] locals, Dictionary<int, Instruction> insns)
         {
-            Start = insns[scope.StartOffset] ;
-            End   = insns[scope.EndOffset]   ;
+            m_start = insns[scope.StartOffset] ;
+            m_end   = insns[scope.EndOffset]   ;
 
             foreach (var v in scope.GetLocals ())
                 if (v.AddressKind == SymAddressKind.ILOffset)
                 {
                     var local = locals[v.AddressField1] ;
 
-                    if (Variables == null)
-                        Variables  = new List<VariableDebugInformation> () ;
+                    if (m_variables == null)
+                        m_variables  = new List<VariableDebugInformation> () ;
 
-                    Variables.Add (new VariableDebugInformation (local, v.Name)) ;
+                    m_variables.Add (new VariableDebugInformation (local, v.Name)) ;
                 }
 
             foreach (var s in scope.GetChildren ())
             {
-                if (Scopes  == null)
-                    Scopes   = new List<Scope> () ;
+                if (m_scopes  == null)
+                    m_scopes   = new List<Scope> () ;
 
-                Scopes.Add (new Scope (s, locals, insns)) ;
+                m_scopes.Add (new Scope (s, locals, insns)) ;
             }
         }
 
         public ScopeDebugInformation ToCecil ()
         {
-            var result = new ScopeDebugInformation (Start, End) ;
+            var result = new ScopeDebugInformation (m_start, m_end) ;
 
-            if (Scopes != null)
-                foreach (var s in Scopes)
+            if (m_scopes != null)
+                foreach (var s in m_scopes)
                     result.Scopes.Add (s.ToCecil ()) ;
 
-            if (Variables != null)
-                foreach (var v in Variables)
+            if (m_variables != null)
+                foreach (var v in m_variables)
                     result.Variables.Add (v) ;
 
             return result ;
@@ -103,21 +105,21 @@ namespace Cil.CompiledTemplates.Cecil
 
         public void Splice (Scope scope, SpliceLocation location)
         {
-            if (Scopes == null)
-                Scopes  = new List<Scope> () ;
+            if (m_scopes == null)
+                m_scopes  = new List<Scope> () ;
 
             if (location == SpliceLocation.AtEnd)
             {
-                if (Start == null)
-                    Start  = scope.Start ;
+                if (m_start == null)
+                    m_start  = scope.m_start ;
 
-                Scopes.Add (scope) ;
+                m_scopes.Add (scope) ;
             }
             else
             if (location == SpliceLocation.AtStart)
             {
-                Scopes.Insert (0, scope) ;
-                Start = scope.Start ;
+                m_scopes.Insert (0, scope) ;
+                m_start = scope.m_start ;
             }
             else
                 // if it's neither at start nor at end,
@@ -127,37 +129,37 @@ namespace Cil.CompiledTemplates.Cecil
 
         private bool Insert (Scope scope)
         {
-            if (Scopes == null)
+            if (m_scopes == null)
             {
-                Scopes  = new List<Scope> () ;
-                Scopes.Add (scope) ;
+                m_scopes  = new List<Scope> () ;
+                m_scopes.Add (scope) ;
                 return true ;
             }
 
-            var insn = Start ;
+            var insn = m_start ;
             var pos  = 0 ;
 
             while (true)
             {
-                if (insn == End)
+                if (insn == m_end)
                     return false ;
 
                 if (insn == null)
                     throw new InvalidOperationException () ;
 
-                if (insn == scope.Start)
+                if (insn == scope.m_start)
                 {
-                    Scopes.Insert (pos, scope) ;
+                    m_scopes.Insert (pos, scope) ;
                     return true ;
                 }
 
-                if (pos  != Scopes.Count &&
-                    insn == Scopes[pos].Start)
+                if (pos  != m_scopes.Count &&
+                    insn == m_scopes[pos].m_start)
                 {
-                    if (Scopes[pos].Insert (scope))
+                    if (m_scopes[pos].Insert (scope))
                         return true ;
 
-                    insn  = Scopes[pos].End ;
+                    insn  = m_scopes[pos].m_end ;
                     pos  += 1 ;
                 }
                 else
