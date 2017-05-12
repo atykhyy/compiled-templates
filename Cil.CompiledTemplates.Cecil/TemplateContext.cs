@@ -14,7 +14,6 @@ using System ;
 using System.Linq        ;
 using System.Linq.Expressions ;
 using System.Collections.Generic   ;
-using System.Collections.Immutable ;
 using System.Reflection  ;
 using Mono.Cecil         ;
 using Mono.Cecil.Cil     ;
@@ -32,6 +31,7 @@ namespace Cil.CompiledTemplates.Cecil
         private readonly TypeReference      m_tIntPtr  ;
 
         private readonly Dictionary<ILProcessor, ILBranchManager> m_splices = new Dictionary<ILProcessor, ILBranchManager> () ;
+        private readonly Dictionary<ILProcessor, Scope>           m_scopes  = new Dictionary<ILProcessor, Scope> () ;
 
         private readonly static MethodReference NullMethod = new MethodReference (null, new TypeReference (null, null, null, null)) ;
 
@@ -62,9 +62,9 @@ namespace Cil.CompiledTemplates.Cecil
             }
 
             m_target   = target ;
-            m_tVoid    = target.Module.Import (typeof (void))   ;
-            m_tObject  = target.Module.Import (typeof (object)) ;
-            m_tIntPtr  = target.Module.Import (typeof (IntPtr)) ;
+            m_tVoid    = target.Module.ImportReference (typeof (void))   ;
+            m_tObject  = target.Module.ImportReference (typeof (object)) ;
+            m_tIntPtr  = target.Module.ImportReference (typeof (IntPtr)) ;
 
             m_dictionary = m_dictionary.Add (m_template, m_target) ;
         }
@@ -123,10 +123,13 @@ namespace Cil.CompiledTemplates.Cecil
         #endregion
 
         #region --[Methods: template application]-------------------------
-        public void OptimizeSplices ()
+        public void Commit ()
         {
             foreach (var il in m_splices.Keys)
                 il.Body.OptimizeMacros () ;
+
+            foreach (var kv in m_scopes)
+                kv.Key.Body.Method.DebugInformation.Scope = kv.Value.ToCecil () ;
         }
 
         public override void CopyExplicitInterfaceImpl (Type type)
@@ -175,14 +178,15 @@ namespace Cil.CompiledTemplates.Cecil
                     throw new InvalidOperationException () ;
 
                 // TODO: template-dependent generic interfaces etc.
-                copy.Overrides.Add (m_target.Module.Import (mapping.InterfaceMethods[i])) ;
+                copy.Overrides.Add (m_target.Module.ImportReference (mapping.InterfaceMethods[i])) ;
 
                 Action<MethodDefinition> fixup ;
                 if (fixups.TryGetValue (mapping.InterfaceMethods[i], out fixup))
                     fixup (copy) ;
             }
 
-            m_target.Interfaces.Add (m_target.Module.Import (type)) ;
+            m_target.Interfaces.Add (new InterfaceImplementation (
+                m_target.Module.ImportReference (type))) ;
         }
 
         public TypeDefinition CopyNestedType (Type type, Mono.Cecil.TypeAttributes attribs)
@@ -448,27 +452,32 @@ namespace Cil.CompiledTemplates.Cecil
                 break ;
             }
 
+            // NB: an intermediate scope structure is necessary
+            // because ScopeDebugInformation does not expose Instruction references
+            var rootScope = PrepareVariableScopes (il) ;
+
             // prepare to splice at indicated location
-            var insnSaved = new List<Instruction> () ;
-            var insnMark  = insnLeft ;
-            while (insns.Count != 0)
-            {
-                var insn  = insns[insns.Count - 1] ;
-                if (insn == insnMark) break ;
-
-                insns.RemoveAt   (insns.Count - 1) ;
-                insnSaved.Add    (insn) ;
-            }
-
             // prepare instruction to branch to instead of normal splice returns
-            Instruction insnRet ;
-            if (insnMark == null || insnMark.Next == null)
+            Instruction[] insnSaved ;
+            var insnMark  = insnLeft ;
+            var iidxRet   = insns.IndexOf (insnLeft) + 1 ;
+            if (iidxRet  == insns.Count)
             {
-                insnRet   = il.Create (OpCodes.Nop) ;
-                insnSaved.Add         (insnRet) ;
+                insnSaved = new Instruction[insns.Count + 1] ;
+                insnSaved[iidxRet] = Instruction.Create (OpCodes.Nop) ;
             }
             else
-                insnRet   = insnMark.Next ;
+            {
+                // NB: can't use insns.RemoveAt because it removes sequence points
+                // and breaks the linked list, potentially making variable scope
+                // ranges unusable
+                insnSaved = new Instruction[insns.Count] ;
+                insns.CopyTo (insnSaved, 0) ;
+                insns.Clear  () ;
+
+                for (int i = 0 ; i < iidxRet ; ++i)
+                    insns.Add (insnSaved[i]) ;
+            }
 
             // handle templated parameters taken directly from IL stack
             if (thisFromILStack || fromILStack != parameters.Length)
@@ -487,11 +496,11 @@ namespace Cil.CompiledTemplates.Cecil
                 if (thisFromILStack)
                     pars[pars.Length - 1] = s_this ;
 
-                var simple = 1 ; // counts skipped nops
+                var simple = true ;
                 for (int i = 0 ; i < pars.Length ; ++i)
                 {
                     // remove simple loads, skip nops
-                    if (simple != 0)
+                    if (simple)
                     {
                     repeat:
                         var isTarget  = insnRight != null && branchManager.IsTarget (insnRight) ;
@@ -503,19 +512,19 @@ namespace Cil.CompiledTemplates.Cecil
 
                             if (insnRight.IsSimpleLoad ())
                             {
-                                dictionary.Add (pars[i], insnRight) ;
-                                insns.RemoveAt (insns.Count - simple) ;
+                                dictionary.Add (pars[i], insnRight.Clone ()) ;
+
+                                // can't use RemoveAt (see note above)
+                                insnRight.OpCode  = OpCodes.Nop ;
+                                insnRight.Operand = null ;
                                 continue ;
                             }
 
                             if (insnRight.OpCode == OpCodes.Nop)
-                            {
-                                simple++ ;
                                 goto repeat ;
-                            }
                         }
 
-                        simple = 0 ;
+                        simple = false ;
                     }
 
                     // spill remaining values into new locals
@@ -528,20 +537,20 @@ namespace Cil.CompiledTemplates.Cecil
                 }
             }
 
-            CopyMethodBody (source, srcbody, il, insnRet, dictionary) ;
+            var spliceScope = CopyMethodBody (source, srcbody, il, insnSaved[iidxRet], dictionary) ;
 
             // restore instructions after splice
-            for (int i = insnSaved.Count - 1 ; i >= 0 ; --i)
-                il.Append (insnSaved[i]) ;
+            for (int i = iidxRet ; i < insnSaved.Length ; ++i)
+                insns.Add (insnSaved[i]) ;
 
             if (location.Relation == SpliceRelation.BeforeAsPart && location.Insn != null)
                 branchManager.Retarget (location.Insn, insnMark.Next) ;
 
-            // TODO: copy variable scopes? the scopes I observed are flat,
-            // so it's basically just a list of locals in the pdb
-            // maybe they are meaningful if there are iterators or async methods,
-            // but I can't yet handle these
             // TODO: how to handle EmitName'd members in debugger?
+            // splice variable scopes
+            // NB: spliceScope always has both Start and End non-null
+            if (spliceScope != null)
+                rootScope.Splice (spliceScope, location) ;
         }
 
         private Tuple<MethodDefinition, MethodBase, MethodBase, Dictionary<object, object>> CreateMethodBuilder (
@@ -637,25 +646,30 @@ namespace Cil.CompiledTemplates.Cecil
             // this relieves the user from having to track abstractness in some cases
             to.Attributes &= ~Mono.Cecil.MethodAttributes.Abstract ;
 
-            CopyMethodBody (from, fromBody, to.Body.GetILProcessor (), null, dictionary) ;
+            var scope  = CopyMethodBody (from, fromBody, to.Body.GetILProcessor (), null, dictionary) ;
+            if (scope != null)
+                to.DebugInformation.Scope = scope.ToCecil () ;
 
             to.Body.OptimizeMacros () ;
             return to ;
         }
 
-        private void CopyMethodBody (MethodBase method, System.Reflection.MethodBody from, ILProcessor il, Instruction ret,
+        private Scope CopyMethodBody (MethodBase method, System.Reflection.MethodBody from, ILProcessor il, Instruction ret,
             Dictionary<object, object> dictionary)
         {
-            foreach (var loc in from.LocalVariables)
-            {
-                var newloc = new VariableDefinition (GetType (loc.LocalType)) ;
-                il.Body.Variables.Add (newloc) ;
-                dictionary.Add   (loc, newloc) ;
-            }
-
             var insns  = new Dictionary<int, Instruction> () ;
             var bytes  = from.GetILAsByteArray () ;
             var paramz = method.GetParameters  () ;
+            var localz = new VariableDefinition[from.LocalVariables.Count] ;
+            for (int i = 0 ; i < localz.Length ; ++i)
+            {
+                var newloc = new VariableDefinition (GetType (from.LocalVariables[i].LocalType)) ;
+                il.Body.Variables.Add (newloc) ;
+                localz[i]            = newloc  ;
+            }
+
+            // add guard value for end-of-method offset
+            insns.Add (bytes.Length, ret) ;
 
             object[] args ;
             if ((method.CallingConvention & CallingConventions.ExplicitThis) != 0)
@@ -676,48 +690,10 @@ namespace Cil.CompiledTemplates.Cecil
             else
                 args = paramz ;
 
-            var sequencePoints = new Dictionary<int, SequencePoint> () ;
-            var methodSymbols  = GetMethodSymbols (method) ;
-            if (methodSymbols != null)
-            {
-                var spoints = methodSymbols.SequencePointCount ;
-                var offsets = new int[spoints] ;
-                var slines  = new int[spoints] ;
-                var elines  = new int[spoints] ;
-                var scols   = new int[spoints] ;
-                var ecols   = new int[spoints] ;
-                var symdocs = new System.Diagnostics.SymbolStore.ISymbolDocument[spoints] ;
-                methodSymbols.GetSequencePoints (offsets, symdocs, slines, scols, elines, ecols) ;
-
-                for (int i  = 0 ; i < spoints ; ++i)
-                {
-                    var sd = new Document (symdocs[i].URL) ;
-
-                    // TODO: not implemented in unmanaged symbol reader
-                    //sd.Hash           = symdocs[i].GetCheckSum () ;
-                    //sd.HashAlgorithm  = PdbGuidMapping.ToHashAlgorithm (symdocs[i].CheckSumAlgorithmId) ;
-                    sd.LanguageVendor = PdbGuidMapping.ToVendor        (symdocs[i].LanguageVendor) ;
-                    sd.Language       = PdbGuidMapping.ToLanguage      (symdocs[i].Language) ;
-                    sd.Type           = PdbGuidMapping.ToType          (symdocs[i].DocumentType) ;
-
-                    var sp = new SequencePoint     (sd) ;
-                    sequencePoints.Add (offsets[i], sp) ;
-
-                    sp.StartLine   = slines[i] ;
-                    sp.EndLine     = elines[i] ;
-                    sp.StartColumn = scols[i]  ;
-                    sp.EndColumn   = ecols[i]  ;
-                }
-            }
-
             for (var offset = 0 ; offset < bytes.Length ; )
             {
                 // remember instruction offset for branches etc.
                 var newinsn = GetOrAdd (insns, offset) ;
-
-                if (sequencePoints.ContainsKey (offset))
-                    newinsn.SequencePoint = sequencePoints[offset] ;
-
                 il.Append (newinsn) ;
 
                 // decode opcode
@@ -742,18 +718,18 @@ namespace Cil.CompiledTemplates.Cecil
                 switch (opcode.Code)
                 {
                 // expand macro opcodes
-                case Code.Ldarg_0:   newinsn.OpCode = OpCodes.Ldarg   ; newinsn.Operand = args[0] ; break ;
-                case Code.Ldarg_1:   newinsn.OpCode = OpCodes.Ldarg   ; newinsn.Operand = args[1] ; break ;
-                case Code.Ldarg_2:   newinsn.OpCode = OpCodes.Ldarg   ; newinsn.Operand = args[2] ; break ;
-                case Code.Ldarg_3:   newinsn.OpCode = OpCodes.Ldarg   ; newinsn.Operand = args[3] ; break ;
-                case Code.Ldloc_0:   newinsn.OpCode = OpCodes.Ldloc   ; newinsn.Operand = dictionary[from.LocalVariables[0]] ; break ;
-                case Code.Ldloc_1:   newinsn.OpCode = OpCodes.Ldloc   ; newinsn.Operand = dictionary[from.LocalVariables[1]] ; break ;
-                case Code.Ldloc_2:   newinsn.OpCode = OpCodes.Ldloc   ; newinsn.Operand = dictionary[from.LocalVariables[2]] ; break ;
-                case Code.Ldloc_3:   newinsn.OpCode = OpCodes.Ldloc   ; newinsn.Operand = dictionary[from.LocalVariables[3]] ; break ;
-                case Code.Stloc_0:   newinsn.OpCode = OpCodes.Stloc   ; newinsn.Operand = dictionary[from.LocalVariables[0]] ; break ;
-                case Code.Stloc_1:   newinsn.OpCode = OpCodes.Stloc   ; newinsn.Operand = dictionary[from.LocalVariables[1]] ; break ;
-                case Code.Stloc_2:   newinsn.OpCode = OpCodes.Stloc   ; newinsn.Operand = dictionary[from.LocalVariables[2]] ; break ;
-                case Code.Stloc_3:   newinsn.OpCode = OpCodes.Stloc   ; newinsn.Operand = dictionary[from.LocalVariables[3]] ; break ;
+                case Code.Ldarg_0:   newinsn.OpCode = OpCodes.Ldarg   ; newinsn.Operand = args[0]   ; break ;
+                case Code.Ldarg_1:   newinsn.OpCode = OpCodes.Ldarg   ; newinsn.Operand = args[1]   ; break ;
+                case Code.Ldarg_2:   newinsn.OpCode = OpCodes.Ldarg   ; newinsn.Operand = args[2]   ; break ;
+                case Code.Ldarg_3:   newinsn.OpCode = OpCodes.Ldarg   ; newinsn.Operand = args[3]   ; break ;
+                case Code.Ldloc_0:   newinsn.OpCode = OpCodes.Ldloc   ; newinsn.Operand = localz[0] ; break ;
+                case Code.Ldloc_1:   newinsn.OpCode = OpCodes.Ldloc   ; newinsn.Operand = localz[1] ; break ;
+                case Code.Ldloc_2:   newinsn.OpCode = OpCodes.Ldloc   ; newinsn.Operand = localz[2] ; break ;
+                case Code.Ldloc_3:   newinsn.OpCode = OpCodes.Ldloc   ; newinsn.Operand = localz[3] ; break ;
+                case Code.Stloc_0:   newinsn.OpCode = OpCodes.Stloc   ; newinsn.Operand = localz[0] ; break ;
+                case Code.Stloc_1:   newinsn.OpCode = OpCodes.Stloc   ; newinsn.Operand = localz[1] ; break ;
+                case Code.Stloc_2:   newinsn.OpCode = OpCodes.Stloc   ; newinsn.Operand = localz[2] ; break ;
+                case Code.Stloc_3:   newinsn.OpCode = OpCodes.Stloc   ; newinsn.Operand = localz[3] ; break ;
                 case Code.Leave_S:   newinsn.OpCode = OpCodes.Leave   ; break ;
                 case Code.Ldarg_S:   newinsn.OpCode = OpCodes.Ldarg   ; break ;
                 case Code.Ldarga_S:  newinsn.OpCode = OpCodes.Ldarga  ; break ;
@@ -835,7 +811,7 @@ namespace Cil.CompiledTemplates.Cecil
                     offset += 4 ;
                     break ;
                 case OperandType.InlineVar:
-                    newinsn.Operand = dictionary[from.LocalVariables[BitConverter.ToUInt16 (bytes, offset)]] ;
+                    newinsn.Operand = localz[BitConverter.ToUInt16 (bytes, offset)] ;
                     offset += 2 ;
                     continue ;
                 case OperandType.InlineArg:
@@ -855,7 +831,7 @@ namespace Cil.CompiledTemplates.Cecil
                     offset += 4 ;
                     continue ;
                 case OperandType.ShortInlineVar:
-                    newinsn.Operand = dictionary[from.LocalVariables[bytes[offset]]] ;
+                    newinsn.Operand = localz[bytes[offset]] ;
                     offset += 1 ;
                     continue ;
                 case OperandType.ShortInlineArg:
@@ -1022,7 +998,8 @@ namespace Cil.CompiledTemplates.Cecil
                         // inserting template bindings and GetEmitName's where appropriate
                         if (meth.IsGenericMethod)
                         {
-                            var newmeth = new GenericInstanceMethod (m_target.Module.Import (((MethodInfo)meth).GetGenericMethodDefinition ())) ;
+                            var newmeth = new GenericInstanceMethod (m_target.Module.ImportReference (
+                                ((MethodInfo)meth).GetGenericMethodDefinition ())) ;
 
                             foreach (var typeArgument in meth.GetGenericArguments ())
                                 newmeth.GenericArguments.Add (GetType (typeArgument)) ;
@@ -1032,7 +1009,7 @@ namespace Cil.CompiledTemplates.Cecil
                         else
                         if (meth.DeclaringType.IsGenericType && !meth.DeclaringType.IsGenericTypeDefinition)
                         {
-                            var genmeth = m_target.Module.Import (meth.Module.ResolveMethod (meth.MetadataToken)) ;
+                            var genmeth = m_target.Module.ImportReference (meth.Module.ResolveMethod (meth.MetadataToken)) ;
 
                             newinsn.Operand = genmeth.CloseDeclaringType (Array.ConvertAll (meth.DeclaringType.GetGenericArguments (), GetType)) ;
                         }
@@ -1058,7 +1035,7 @@ namespace Cil.CompiledTemplates.Cecil
                     {
                         if (field.DeclaringType.IsGenericType && !field.DeclaringType.IsGenericTypeDefinition)
                         {
-                            var genfield = m_target.Module.Import (meth.Module.ResolveField (field.MetadataToken)) ;
+                            var genfield = m_target.Module.ImportReference (meth.Module.ResolveField (field.MetadataToken)) ;
 
                             newinsn.Operand = genfield.CloseDeclaringType (Array.ConvertAll (field.DeclaringType.GetGenericArguments (), GetType)) ;
                         }
@@ -1089,93 +1066,56 @@ namespace Cil.CompiledTemplates.Cecil
                 }) ;
             }
 
+            // add debugging information if available
+            var methodSymbols  = GetMethodSymbols (method) ;
             if (methodSymbols == null)
-                return ;
+                return null ;
+
+            // copy sequence points
+            var dinfo   = il.Body.Method.DebugInformation  ;
+            var spoints = methodSymbols.SequencePointCount ;
+            var offsets = new int[spoints] ;
+            var slines  = new int[spoints] ;
+            var elines  = new int[spoints] ;
+            var scols   = new int[spoints] ;
+            var ecols   = new int[spoints] ;
+            var symdocs = new System.Diagnostics.SymbolStore.ISymbolDocument[spoints] ;
+            methodSymbols.GetSequencePoints (offsets, symdocs, slines, scols, elines, ecols) ;
+
+            for (int i  = 0 ; i < spoints ; ++i)
+            {
+                var sd = new Document (symdocs[i].URL) ;
+
+                // TODO: not implemented in unmanaged symbol reader
+                //sd.Hash           = symdocs[i].GetCheckSum () ;
+                //sd.HashAlgorithm  = PdbGuidMapping.ToHashAlgorithm (symdocs[i].CheckSumAlgorithmId) ;
+                sd.LanguageVendor = PdbGuidMapping.ToVendor        (symdocs[i].LanguageVendor) ;
+                sd.Language       = PdbGuidMapping.ToLanguage      (symdocs[i].Language) ;
+                sd.Type           = PdbGuidMapping.ToType          (symdocs[i].DocumentType) ;
+
+                var sp = new SequencePoint (insns[offsets[i]], sd) ;
+                dinfo.SequencePoints.Add   (sp) ;
+
+                sp.StartLine   = slines[i] ;
+                sp.EndLine     = elines[i] ;
+                sp.StartColumn = scols[i]  ;
+                sp.EndColumn   = ecols[i]  ;
+            }
 
             // copy local variable scopes
-            var sentinel      = il.Create (OpCodes.Nop) ;
-            sentinel.Previous = il.Body.Instructions[il.Body.Instructions.Count - 1] ;
-            insns.Add (bytes.Length, sentinel) ;
-
-            var locals = from.LocalVariables.Select (_ => (VariableDefinition) dictionary[_]).ToArray () ;
-            var scope  = CopyScope (methodSymbols.RootScope, locals, insns) ;
-
-            var dinfo  = il.Body.DebugInformation ;
-            if (dinfo == null)
-            {
-                dinfo  = new MethodDebugInformation () ;
-
-                dinfo.Scope              = scope ;
-                il.Body.DebugInformation = dinfo ;
-                return ;
-            }
-
-            // use the fact that splicing removes post-splice instructions
-            // to find the correct place in the scope tree to insert into
-            // assumes the scope tree is correctly ordered by offset
-            var oldScope = dinfo.Scope ;
-            if (oldScope.Start.Next != null && InsertScope (scope, oldScope))
-                return ;
-
-            if (oldScope.HasVariables)
-            {
-                oldScope = new Scope () ;
-                oldScope.Scopes.Add  (dinfo.Scope) ;
-                dinfo.Scope = oldScope ;
-            }
-
-            if (oldScope.Start.Next != null)
-            {
-                oldScope.Scopes.Add (scope) ;
-                oldScope.End = scope.End ;
-            }
-            else
-            {
-                oldScope.Start = scope.Start ;
-                oldScope.Scopes.Insert (0, scope) ;
-            }
+            return new Scope (methodSymbols.RootScope, localz, insns) ;
         }
 
-        private bool InsertScope (Scope what, Scope where)
+        private Scope PrepareVariableScopes (ILProcessor il)
         {
-            if (where.End.Previous != null)
-                return false ;
-
-            if(!where.HasScopes)
+            Scope scope ;
+            if (!m_scopes.TryGetValue (il, out scope))
             {
-                where.Scopes.Add (what) ;
-                return true ;
+                scope = Scope.FromMethodBody (il.Body) ;
+                m_scopes.Add (il, scope) ;
             }
 
-            foreach (var child in where.Scopes)
-                if (InsertScope (what, child))
-                    return true ;
-
-            return false ;
-        }
-
-        private Scope CopyScope (System.Diagnostics.SymbolStore.ISymbolScope scope,
-            VariableDefinition[] locals, Dictionary<int, Instruction> insns)
-        {
-            var newscope   = new Scope () ;
-            newscope.Start = insns[scope.StartOffset] ;
-            newscope.End   = insns[scope.EndOffset].Previous ;
-
-            foreach (var v in scope.GetLocals ())
-                if (v.AddressKind == System.Diagnostics.SymbolStore.SymAddressKind.ILOffset)
-                {
-                    var local = locals[v.AddressField1] ;
-
-                    if (String.IsNullOrEmpty (local.Name))
-                        local.Name = v.Name ;
-
-                    newscope.Variables.Add (local) ;
-                }
-
-            foreach (var s in scope.GetChildren ())
-                newscope.Scopes.Add (CopyScope  (s, locals, insns)) ;
-
-            return newscope ;
+            return scope ;
         }
 
         private Instruction GetOrAdd (Dictionary<int, Instruction> insns, int offset)
@@ -1235,7 +1175,7 @@ namespace Cil.CompiledTemplates.Cecil
                     git.GenericArguments.Add (GetType (param)) ;
             }
             else
-                typeref  = m_target.Module.Import (type) ;
+                typeref  = m_target.Module.ImportReference (type) ;
 
             m_dictionary = m_dictionary.Add (type, typeref) ;
             return typeref ;
@@ -1256,15 +1196,15 @@ namespace Cil.CompiledTemplates.Cecil
             foreach (var ca in attributes)
                 if (ca.AttributeType.Namespace != typeof (TemplateHelpers).Namespace)
                 {
-                    var newca = new CustomAttribute (m_target.Module.Import (ca.Constructor)) ;
+                    var newca = new CustomAttribute (m_target.Module.ImportReference (ca.Constructor)) ;
 
                     foreach (var arg in ca.ConstructorArguments)
                         newca.ConstructorArguments.Add (
-                            new CustomAttributeArgument (m_target.Module.Import (arg.ArgumentType), arg.Value)) ;
+                            new CustomAttributeArgument (m_target.Module.ImportReference (arg.ArgumentType), arg.Value)) ;
 
                     foreach (var arg in ca.NamedArguments)
                         newca.Fields.Add (new Mono.Cecil.CustomAttributeNamedArgument (arg.MemberName,
-                            new CustomAttributeArgument (m_target.Module.Import (arg.TypedValue.ArgumentType), arg.TypedValue.Value))) ;
+                            new CustomAttributeArgument (m_target.Module.ImportReference (arg.TypedValue.ArgumentType), arg.TypedValue.Value))) ;
 
                     to.CustomAttributes.Add (newca) ; // TODO: templated items in custom attributes?
                 }

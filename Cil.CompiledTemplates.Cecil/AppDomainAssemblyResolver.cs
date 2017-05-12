@@ -41,6 +41,10 @@ namespace Cil.CompiledTemplates.Cecil
             return Resolve (AppDomain.CurrentDomain.Load (name.ToAssemblyName ()), parameters) ;
         }
 
+        public void Dispose ()
+        {
+        }
+
         private AssemblyDefinition Resolve (Assembly assembly, ReaderParameters parameters)
         {
             return AssemblyDefinition.ReadAssembly (assembly.ManifestModule.FullyQualifiedName, parameters) ;

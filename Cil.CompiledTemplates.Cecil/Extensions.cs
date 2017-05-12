@@ -137,7 +137,7 @@ namespace Cil.CompiledTemplates.Cecil
                                       (field.IsStatic ? BindingFlags.Static : BindingFlags.Instance | BindingFlags.DeclaredOnly)) ;
             }
 
-            return module.Import (field) ;
+            return module.ImportReference (field) ;
         }
 
         public static MethodReference ImportDelegateCtor (this ModuleDefinition module, Type delegateType)
@@ -145,7 +145,7 @@ namespace Cil.CompiledTemplates.Cecil
             if (!typeof (Delegate).IsAssignableFrom (delegateType))
                 throw new ArgumentException () ;
 
-            return module.Import (delegateType.GetConstructors ().Single ()) ;
+            return module.ImportReference (delegateType.GetConstructors ().Single ()) ;
         }
 
         public static MethodReference Import<T> (this ModuleDefinition module, Expression<Func<T>> expr)
@@ -180,7 +180,7 @@ namespace Cil.CompiledTemplates.Cecil
             if (type.IsGenericType && ShouldGenericize (type.GetGenericArguments ()))
                 method = MethodBase.GetMethodFromHandle (method.MethodHandle, type.GetGenericTypeDefinition ().TypeHandle) ;
 
-            return module.Import (method) ;
+            return module.ImportReference (method) ;
         }
 
         private static bool ShouldGenericize (params Type[] types)
@@ -548,63 +548,12 @@ namespace Cil.CompiledTemplates.Cecil
             return il.Create (opcode, method.Body.Method) ;
         }
 
-        public static Instruction Clone (this ILProcessor il, Instruction insn)
+        public static Instruction Clone (this Instruction insn)
         {
-            var tr  = insn.Operand as TypeReference ;
-            if (tr != null)
-                return il.Create (insn.OpCode, tr) ;
-
-            var cs  = insn.Operand as CallSite ;
-            if (cs != null)
-                return il.Create (insn.OpCode, cs) ;
-
-            var mr  = insn.Operand as MethodReference ;
-            if (mr != null)
-                return il.Create (insn.OpCode, mr) ;
-
-            var fr  = insn.Operand as FieldReference ;
-            if (fr != null)
-                return il.Create (insn.OpCode, fr) ;
-
-            var st  = insn.Operand as string ;
-            if (st != null)
-                return il.Create (insn.OpCode, st) ;
-
-            if (insn.Operand is double)
-                return il.Create (insn.OpCode, (double) insn.Operand) ;
-
-            if (insn.Operand is float)
-                return il.Create (insn.OpCode, (float) insn.Operand) ;
-
-            if (insn.Operand is sbyte)
-                return il.Create (insn.OpCode, (sbyte) insn.Operand) ;
-
-            if (insn.Operand is byte)
-                return il.Create (insn.OpCode, (byte) insn.Operand) ;
-
-            if (insn.Operand is long)
-                return il.Create (insn.OpCode, (long) insn.Operand) ;
-
-            if (insn.Operand is int)
-                return il.Create (insn.OpCode, (int) insn.Operand) ;
-
-            var _i  = insn.Operand as Instruction ;
-            if (_i != null)
-                return il.Create (insn.OpCode, _i) ;
-
-            var tg  = insn.Operand as Instruction[] ;
-            if (tg != null)
-                return il.Create (insn.OpCode, tg) ;
-
-            var vd  = insn.Operand as VariableDefinition ;
-            if (vd != null)
-                return il.Create (insn.OpCode, vd) ;
-
-            var pd  = insn.Operand as ParameterDefinition ;
-            if (pd != null)
-                return il.Create (insn.OpCode, pd) ;
-
-            return il.Create (insn.OpCode) ;
+            var newinsn     = Instruction.Create (OpCodes.Nop) ;
+            newinsn.OpCode  = insn.OpCode  ;
+            newinsn.Operand = insn.Operand ;
+            return newinsn ;
         }
         #endregion
     }
