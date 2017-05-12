@@ -28,6 +28,7 @@ namespace Cil.CompiledTemplates.Cecil
         private List<Scope> m_scopes ;
 
         private List<VariableDebugInformation> m_variables ;
+        private List<ConstantDebugInformation> m_constants ;
         #endregion
 
         public Scope (Instruction start, Instruction end)
@@ -77,6 +78,14 @@ namespace Cil.CompiledTemplates.Cecil
             }
         }
 
+        public void AddConstant (string name, TypeReference type, object value)
+        {
+            if (m_constants == null)
+                m_constants  = new List<ConstantDebugInformation> () ;
+
+            m_constants.Add (new ConstantDebugInformation (name, type, value)) ;
+        }
+
         public ScopeDebugInformation ToCecil ()
         {
             var result = new ScopeDebugInformation (m_start, m_end) ;
@@ -88,6 +97,10 @@ namespace Cil.CompiledTemplates.Cecil
             if (m_variables != null)
                 foreach (var v in m_variables)
                     result.Variables.Add (v) ;
+
+            if (m_constants != null)
+                foreach (var c in m_constants)
+                    result.Constants.Add (c) ;
 
             return result ;
         }

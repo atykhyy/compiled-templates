@@ -29,6 +29,7 @@ namespace Cil.CompiledTemplates.Cecil
         private readonly TypeReference      m_tVoid    ;
         private readonly TypeReference      m_tObject  ;
         private readonly TypeReference      m_tIntPtr  ;
+        private readonly TypeReference      m_tString  ;
 
         private readonly Dictionary<ILProcessor, ILBranchManager> m_splices = new Dictionary<ILProcessor, ILBranchManager> () ;
         private readonly Dictionary<ILProcessor, Scope>           m_scopes  = new Dictionary<ILProcessor, Scope> () ;
@@ -65,6 +66,7 @@ namespace Cil.CompiledTemplates.Cecil
             m_tVoid    = target.Module.ImportReference (typeof (void))   ;
             m_tObject  = target.Module.ImportReference (typeof (object)) ;
             m_tIntPtr  = target.Module.ImportReference (typeof (IntPtr)) ;
+            m_tString  = target.Module.ImportReference (typeof (String)) ;
 
             m_dictionary = m_dictionary.Add (m_template, m_target) ;
         }
@@ -1103,7 +1105,25 @@ namespace Cil.CompiledTemplates.Cecil
             }
 
             // copy local variable scopes
-            return new Scope (methodSymbols.RootScope, localz, insns) ;
+            var scope = new Scope (methodSymbols.RootScope, localz, insns) ;
+
+            // add information on current bindings
+            // for now, I just add the mappings as constant strings
+            // 
+            // adding ImportDebugInformation with type aliases does not do
+            // anything visible in the debugger
+            // it is possible to deal with templated fields by emitting the templated
+            // field with a special DebuggerTypeProxy type and having template code
+            // assign a state variable in this field indicating the "current" binding,
+            // so that the debugger proxy can return the appropriate value
+            foreach (var typevar in m_vars)
+            {
+                object value ;
+                if (m_dictionary.TryGetValue (typevar, out value) && value != null)
+                    scope.AddConstant (typevar.Name, m_tString, value.ToString ()) ;
+            }
+
+            return scope ;
         }
 
         private Scope PrepareVariableScopes (ILProcessor il)

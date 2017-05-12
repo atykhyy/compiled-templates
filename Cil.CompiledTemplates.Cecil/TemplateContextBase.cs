@@ -35,6 +35,8 @@ namespace Cil.CompiledTemplates.Cecil
         protected readonly static object s_scope = new object () ;
         protected readonly static object s_this  = new object () ;
 
+        protected readonly HashSet<MemberInfo> m_vars = new HashSet<MemberInfo> () ;
+
         private sealed class DictionaryState : IDisposable
         {
             private readonly TemplateContextBase                 m_context ;
@@ -347,11 +349,12 @@ namespace Cil.CompiledTemplates.Cecil
         #endregion
 
         #region --[Methods: Private]--------------------------------------
-        protected T VerifyTemplatedMember<T> (T member) where T : ICustomAttributeProvider
+        protected T VerifyTemplatedMember<T> (T member) where T : MemberInfo
         {
             if (!member.IsDefined (typeof (TemplatedMemberAttribute), false))
                 throw new InvalidOperationException () ;
 
+            m_vars.Add (member) ;
             return member ;
         }
 
