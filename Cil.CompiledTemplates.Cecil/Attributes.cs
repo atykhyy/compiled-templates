@@ -59,6 +59,25 @@ namespace Cil.CompiledTemplates.Cecil
     }
 
     [AttributeUsage (AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = true)]
+    public sealed class BindLabelAttribute : Attribute, IEmitLabelAttribute
+    {
+        public BindLabelAttribute (Type type, params Type[] labels)
+        {
+            if (labels == null)
+                throw new ArgumentNullException () ;
+
+            if (type == null)
+                throw new ArgumentNullException () ;
+
+            Type   = type   ;
+            Labels = labels ;
+        }
+
+        public Type   Type   { get ; private set ; }
+        public Type[] Labels { get ; private set ; }
+    }
+
+    [AttributeUsage (AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = true)]
     public sealed class EmitExplicitInterfaceImplAttribute : Attribute, IEmitLabelAttribute
     {
         public EmitExplicitInterfaceImplAttribute (Type @interface, params Type[] labels)

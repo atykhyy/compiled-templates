@@ -32,6 +32,7 @@ namespace Cil.CompiledTemplates.Cecil
         // values are target-scoped
         protected ImmutableDictionary<object, object> m_dictionary ;
 
+        protected readonly static object s_label = new object () ;
         protected readonly static object s_scope = new object () ;
         protected readonly static object s_this  = new object () ;
 
@@ -81,7 +82,7 @@ namespace Cil.CompiledTemplates.Cecil
 
         public object Get (Type template)
         {
-            return m_dictionary[GetTemplatedType (template)] ;
+            return m_dictionary[template] ;
         }
 
         public object GetField<T> (Expression<Func<T>> func)
@@ -153,7 +154,16 @@ namespace Cil.CompiledTemplates.Cecil
         {
             var labels = new HashSet<Type> () ;
             GatherLabels (labels, label) ;
-            CopyLabels   (m_template, labels) ;
+
+            /**/m_dictionary = m_dictionary.Add (s_label, labels) ;
+            try
+            {
+                CopyLabels (m_template, labels) ;
+            }
+            finally
+            {
+                m_dictionary = m_dictionary.Remove (s_label) ;
+            }
         }
 
         private void GatherLabels (HashSet<Type> labels, Type label)
@@ -178,9 +188,16 @@ namespace Cil.CompiledTemplates.Cecil
 
             var all = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly ;
 
-            // TODO: copy the nested types themselves? ordering becomes tricky!
             foreach (var type in template.GetNestedTypes (all))
-                    CopyLabels   (type, labels) ;
+            {
+                // check the dictionary because the type might have already
+                // been copied via GetType
+                if(!m_dictionary.ContainsKey (type) &&
+                    MatchesLabel (type, labels))
+                    CopyNested   (type) ;
+
+                /**/CopyLabels   (type, labels) ;
+            }
 
             foreach (var ctor in template.GetConstructors (all))
                 if (MatchesLabel (ctor, labels) || MatchesLabelInParams (ctor, labels))
@@ -228,6 +245,8 @@ namespace Cil.CompiledTemplates.Cecil
 
             return false ;
         }
+
+        public abstract void CopyNested (Type type) ;
 
         public abstract void CopyExplicitInterfaceImpl (Type type) ;
 
@@ -357,6 +376,43 @@ namespace Cil.CompiledTemplates.Cecil
             m_vars.Add (member) ;
             return member ;
         }
+
+        protected object GetType (Type type)
+        {
+            object value ;
+            if (m_dictionary.TryGetValue (type, out value))
+                return value ;
+
+            if (type.IsDefined (typeof (EmitLabelAttribute)))
+            {
+                object labels ;
+                if (m_dictionary.TryGetValue (s_label, out labels))
+                    if (MatchesLabel   (type, (HashSet<Type>)labels))
+                    {
+                        CopyNested     (type) ;
+                        return GetType (type) ;
+                    }
+
+                // fall through: may be bound with [BindLabel]
+            }
+
+            if (type.IsDefined (typeof (TemplatedMemberAttribute), false))
+            {
+                object labels ;
+                if (m_dictionary.TryGetValue (s_label, out labels))
+                    foreach (var bl in type.GetCustomAttributes<BindLabelAttribute> (false))
+                        if (MatchesLabel (bl, (HashSet<Type>)labels))
+                            return GetType (bl.Type) ;
+
+                // fall through: may be forward reference
+            }
+
+            value        = GetTypeInternal  (type) ;
+            m_dictionary = m_dictionary.Add (type, value) ;
+            return value ;
+        }
+
+        protected abstract object GetTypeInternal (Type type) ;
 
         protected string GetEmitName (MemberInfo member)
         {

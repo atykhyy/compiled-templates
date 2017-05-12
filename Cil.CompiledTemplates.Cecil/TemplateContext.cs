@@ -191,14 +191,14 @@ namespace Cil.CompiledTemplates.Cecil
                 m_target.Module.ImportReference (type))) ;
         }
 
-        public TypeDefinition CopyNestedType (Type type, Mono.Cecil.TypeAttributes attribs)
+        public override void CopyNested (Type type)
         {
             // TODO: multi-level nesting
             if (!type.IsNested || !type.DeclaringType.IsAssignableFrom (m_template))
                 throw new ArgumentOutOfRangeException (nameof (type)) ;
 
             var template = type ;
-            var newtype  = new TypeDefinition (null, template.Name, (Mono.Cecil.TypeAttributes) template.Attributes | attribs) ;
+            var newtype  = new TypeDefinition (null, template.Name, (Mono.Cecil.TypeAttributes) template.Attributes) ;
 
             var emitAttr  = type.GetCustomAttribute<EmitNameAttribute> () ;
             if (emitAttr != null)
@@ -223,7 +223,6 @@ namespace Cil.CompiledTemplates.Cecil
             m_target.NestedTypes.Add (newtype) ;
 
             m_dictionary = m_dictionary.Add (template, newtype) ;
-            return newtype ;
         }
 
         protected override void CopyField (FieldInfo field)
@@ -1109,7 +1108,8 @@ namespace Cil.CompiledTemplates.Cecil
 
             // add information on current bindings
             // for now, I just add the mappings as constant strings
-            // 
+            // TODO: add templated parameter bindings
+            //
             // adding ImportDebugInformation with type aliases does not do
             // anything visible in the debugger
             // it is possible to deal with templated fields by emitting the templated
@@ -1169,36 +1169,33 @@ namespace Cil.CompiledTemplates.Cecil
                 return (TypeDefinition) m_dictionary[member.DeclaringType] ;
         }
 
-        private TypeReference GetType (Type type)
+        private new TypeReference GetType (Type type)
+        {
+            return (TypeReference) base.GetType (type) ;
+        }
+
+        protected override object GetTypeInternal (Type type)
         {
             object value ;
-            if (m_dictionary.TryGetValue (type, out value))
-                return (TypeReference) value ;
-
             if (type.DeclaringType != null && m_dictionary.TryGetValue (type.DeclaringType, out value))
             {
                 // allow limited "forward declarations"
                 var emitName = GetEmitName (type) ;
                 var emitType = ((TypeDefinition) value).NestedTypes.Single (_ => _.Name == emitName) ;
-
-                m_dictionary = m_dictionary.Add (type, emitType) ;
                 return emitType ;
             }
 
-            TypeReference typeref ;
             if (type.IsGenericType && !type.IsGenericTypeDefinition)
             {
                 var git  = new GenericInstanceType (GetType (type.GetGenericTypeDefinition ())) ;
-                typeref  = git ;
 
                 foreach (var param in type.GetGenericArguments ())
                     git.GenericArguments.Add (GetType (param)) ;
+
+                return git ;
             }
             else
-                typeref  = m_target.Module.ImportReference (type) ;
-
-            m_dictionary = m_dictionary.Add (type, typeref) ;
-            return typeref ;
+                return m_target.Module.ImportReference (type) ;
         }
 
         private void CopyCAs (MemberInfo from, Mono.Cecil.ICustomAttributeProvider to)
