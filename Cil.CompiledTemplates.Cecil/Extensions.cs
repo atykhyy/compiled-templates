@@ -499,6 +499,23 @@ namespace Cil.CompiledTemplates.Cecil
             case Code.Ldarg_3:
             case Code.Ldarg_S:
             case Code.Ldsfld:
+            case Code.Ldstr:
+            case Code.Ldnull:
+            case Code.Ldc_I4_M1:
+            case Code.Ldc_I4_0:
+            case Code.Ldc_I4_1:
+            case Code.Ldc_I4_2:
+            case Code.Ldc_I4_3:
+            case Code.Ldc_I4_4:
+            case Code.Ldc_I4_5:
+            case Code.Ldc_I4_6:
+            case Code.Ldc_I4_7:
+            case Code.Ldc_I4_8:
+            case Code.Ldc_I4_S:
+            case Code.Ldc_I4:
+            case Code.Ldc_I8:
+            case Code.Ldc_R4:
+            case Code.Ldc_R8:
                 return true ;
 
             default:
