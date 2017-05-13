@@ -16,14 +16,43 @@ using Mono.Cecil.Cil ;
 
 namespace Cil.CompiledTemplates.Cecil
 {
+    /// <summary>
+    /// Enumerates the ways the splice location
+    /// relates to the indicated instruction.
+    /// </summary>
     public enum SpliceRelation
     {
+        /// <summary>
+        /// The splice is inserted before the instruction.
+        /// </summary>
         Before,
+
+        /// <summary>
+        /// The splice is inserted before the instruction
+        /// as if it was a part of that instruction,
+        /// i.e. branches to the instruction will go
+        /// to the first instruction of the splice.
+        /// </summary>
         BeforeAsPart,
+
+        /// <summary>
+        /// The splice replaces the instruction.
+        /// </summary>
         Replace,
+
+        /// <summary>
+        /// The splice is inserted after the instruction
+        /// as if it was a part of that instruction,
+        /// i.e. branches to the instruction following
+        /// the indicated instruction will NOT be retargeted
+        /// to the first instruction of the splice.
+        /// </summary>
         AfterAsPart,
     }
 
+    /// <summary>
+    /// Describes the target of a method splice operation.
+    /// </summary>
     public sealed class SpliceLocation
     {
         private readonly Instruction    m_insn ;
@@ -35,7 +64,14 @@ namespace Cil.CompiledTemplates.Cecil
             m_relation = relation ;
         }
 
+        /// <summary>
+        /// Gets the instruction identifying the splice location.
+        /// </summary>
         public Instruction    Insn     { get { return m_insn ;     }}
+
+        /// <summary>
+        /// Indicates how the splice location relates to <see cref="Insn"/>.
+        /// </summary>
         public SpliceRelation Relation { get { return m_relation ; }}
 
         /// <summary>
@@ -104,7 +140,16 @@ namespace Cil.CompiledTemplates.Cecil
             return new SpliceLocation (insn, SpliceRelation.AfterAsPart) ;
         }
 
+        /// <summary>
+        /// The splice is inserted before the first instruction
+        /// of the target method.
+        /// </summary>
         public static readonly SpliceLocation AtStart = new SpliceLocation (null, SpliceRelation.Before) ;
+
+        /// <summary>
+        /// The splice is inserted after the last instruction
+        /// of the target method.
+        /// </summary>
         public static readonly SpliceLocation AtEnd   = new SpliceLocation (null, SpliceRelation.BeforeAsPart) ;
     }
 }

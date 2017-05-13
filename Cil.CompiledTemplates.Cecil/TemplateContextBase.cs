@@ -22,6 +22,10 @@ using SDS = System.Diagnostics.SymbolStore ;
 
 namespace Cil.CompiledTemplates.Cecil
 {
+    /// <summary>
+    /// The abstract base class for template contexts.
+    /// Contains target-agnostic declarations and functionality.
+    /// </summary>
     public abstract class TemplateContextBase
     {
         #region --[Fields: Private]---------------------------------------
@@ -73,6 +77,13 @@ namespace Cil.CompiledTemplates.Cecil
         #endregion
 
         #region --[Methods: context manipulation]-------------------------
+        /// <summary>
+        /// Pushes the context state, setting a new scope name,
+        /// and returns an object that restores the previous state when disposed.
+        /// </summary>
+        /// <param name="scope">
+        /// The new scope name. Used as the first parameter in formatting [EmitName] strings.
+        /// </param>
         public IDisposable Push (string scope)
         {
             var disposable = new DictionaryState  (this) ;
@@ -80,16 +91,27 @@ namespace Cil.CompiledTemplates.Cecil
             return disposable ;
         }
 
+        /// <summary>
+        /// Gets the current binding for <paramref name="template"/>.
+        /// </summary>
         public object Get (Type template)
         {
             return m_dictionary[template] ;
         }
 
+        /// <summary>
+        /// Gets the current binding for the templated field
+        /// identified by the lambda expression <paramref name="func"/>.
+        /// </summary>
         public object GetField<T> (Expression<Func<T>> func)
         {
             return m_dictionary[GetTemplatedField (func)] ;
         }
 
+        /// <summary>
+        /// Gets the current binding for the templated method
+        /// identified by the lambda expression <paramref name="expr"/>.
+        /// </summary>
         public object Get_ (Expression<Action> expr)
         {
             // TODO: GetXxx for non-templated members?
@@ -150,6 +172,9 @@ namespace Cil.CompiledTemplates.Cecil
         #endregion
 
         #region --[Methods: template application]-------------------------
+        /// <summary>
+        /// Copies all template members matching <paramref name="label"/>.
+        /// </summary>
         public void CopyLabel (Type label)
         {
             var labels = new HashSet<Type> () ;
@@ -246,10 +271,21 @@ namespace Cil.CompiledTemplates.Cecil
             return false ;
         }
 
+        /// <summary>
+        /// Copies the nested template type <paramref name="type"/>.
+        /// </summary>
         public abstract void CopyNested (Type type) ;
 
+        /// <summary>
+        /// Copies all members comprising the explicit implementation
+        /// of the specified interface <paramref name="type"/>.
+        /// </summary>
         public abstract void CopyExplicitInterfaceImpl (Type type) ;
 
+        /// <summary>
+        /// Copies the template field
+        /// identified by the lambda expression <paramref name="func"/>.
+        /// </summary>
         public void CopyField<T> (Expression<Func<T>> func)
         {
             var mex  = func.Body as MemberExpression ;
@@ -262,47 +298,75 @@ namespace Cil.CompiledTemplates.Cecil
         protected abstract void CopyField (FieldInfo field) ;
 
         #region public void CopyMethod (..., MethodAttributes? attribs = null)
+        /// <summary>
+        /// Copies the template method that is the target of the supplied delegate.
+        /// </summary>
         public void CopyMethod<P1, P2, P3, T> (Func<P1, P2, P3, T> d, MethodAttributes? attribs = null)
         {
             CopyMethod (d.Method, attribs) ;
         }
 
+        /// <summary>
+        /// Copies the template method that is the target of the supplied delegate.
+        /// </summary>
         public void CopyMethod<P1, P2, T> (Func<P1, P2, T> d, MethodAttributes? attribs = null)
         {
             CopyMethod (d.Method, attribs) ;
         }
 
+        /// <summary>
+        /// Copies the template method that is the target of the supplied delegate.
+        /// </summary>
         public void CopyMethod<P1, T> (Func<P1, T> d, MethodAttributes? attribs = null)
         {
             CopyMethod (d.Method, attribs) ;
         }
 
+        /// <summary>
+        /// Copies the template method that is the target of the supplied delegate.
+        /// </summary>
         public void CopyMethod<T> (Func<T> d, MethodAttributes? attribs = null)
         {
             CopyMethod (d.Method, attribs) ;
         }
 
+        /// <summary>
+        /// Copies the template method that is the target of the supplied delegate.
+        /// </summary>
         public void CopyMethod<P1, P2, P3> (Action<P1, P2, P3> d, MethodAttributes? attribs = null)
         {
             CopyMethod (d.Method, attribs) ;
         }
 
+        /// <summary>
+        /// Copies the template method that is the target of the supplied delegate.
+        /// </summary>
         public void CopyMethod<P1, P2> (Action<P1, P2> d, MethodAttributes? attribs = null)
         {
             CopyMethod (d.Method, attribs) ;
         }
 
+        /// <summary>
+        /// Copies the template method that is the target of the supplied delegate.
+        /// </summary>
         public void CopyMethod<P1> (Action<P1> d, MethodAttributes? attribs = null)
         {
             CopyMethod (d.Method, attribs) ;
         }
 
+        /// <summary>
+        /// Copies the template method that is the target of the supplied delegate.
+        /// </summary>
         public void CopyMethod (Action d, MethodAttributes? attribs = null)
         {
             CopyMethod (d.Method, attribs) ;
         }
         #endregion
 
+        /// <summary>
+        /// Copies the template method
+        /// identified by the lambda expression <paramref name="expr"/>.
+        /// </summary>
         public void CopyMethod_ (Expression<Action> expr, MethodAttributes? attribs = null)
         {
             var fex  = expr.Body as MethodCallExpression ;
@@ -322,6 +386,10 @@ namespace Cil.CompiledTemplates.Cecil
             throw new ArgumentOutOfRangeException (nameof (expr)) ;
         }
 
+        /// <summary>
+        /// Copies the template property getter
+        /// identified by the lambda expression <paramref name="expr"/>.
+        /// </summary>
         public void CopyGetter_<T> (Expression<Func<T>> expr, MethodAttributes? attribs = null)
         {
             var mex  = expr.Body as MemberExpression ;
@@ -331,6 +399,10 @@ namespace Cil.CompiledTemplates.Cecil
             CopyMethod (GetMethodInType (((PropertyInfo) mex.Member).GetGetMethod (), mex.Expression?.Type), attribs) ;
         }
 
+        /// <summary>
+        /// Copies the template property setter
+        /// identified by the lambda expression <paramref name="expr"/>.
+        /// </summary>
         public void CopySetter_<T> (Expression<Func<T>> expr, MethodAttributes? attribs = null)
         {
             // limitation: property must have a getter, or expression will not compile

@@ -98,6 +98,11 @@ namespace Cil.CompiledTemplates.Cecil
         #endregion
     }
 
+    /// <summary>
+    /// Instructs the Import extensions to import an open generic type
+    /// or method when a type marked with this attribute is used
+    /// as a generic parameter.
+    /// </summary>
     public sealed class GenericizeAttribute : Attribute
     {
     }
@@ -108,6 +113,9 @@ namespace Cil.CompiledTemplates.Cecil
     public static class CecilExtensions
     {
         #region --[Methods: Extensions]-----------------------------------
+        /// <summary>
+        /// Creates a .NET <see cref="AssemblyName"/> from the assembly name reference.
+        /// </summary>
         public static AssemblyName ToAssemblyName (this AssemblyNameReference name)
         {
             var result = new AssemblyName
@@ -124,6 +132,12 @@ namespace Cil.CompiledTemplates.Cecil
             return result ;
         }
 
+        /// <summary>
+        /// Imports the field identified by the lambda expression <paramref name="expr"/>.
+        /// </summary>
+        /// <remarks>
+        /// The lambda expression must have the form (...) => ...m_field.
+        /// </remarks>
         public static FieldReference ImportField<T> (this ModuleDefinition module, Expression<Func<T>> expr)
         {
             var field = (FieldInfo)((MemberExpression)expr.Body).Member ;
@@ -140,6 +154,9 @@ namespace Cil.CompiledTemplates.Cecil
             return module.ImportReference (field) ;
         }
 
+        /// <summary>
+        /// Imports the constructor for the supplied delegate type.
+        /// </summary>
         public static MethodReference ImportDelegateCtor (this ModuleDefinition module, Type delegateType)
         {
             if (!typeof (Delegate).IsAssignableFrom (delegateType))
@@ -148,16 +165,34 @@ namespace Cil.CompiledTemplates.Cecil
             return module.ImportReference (delegateType.GetConstructors ().Single ()) ;
         }
 
+        /// <summary>
+        /// Imports the method identified by the lambda expression <paramref name="expr"/>.
+        /// </summary>
+        /// <remarks>
+        /// The lambda expression must have the form (...) => ....Method (...).
+        /// </remarks>
         public static MethodReference Import<T> (this ModuleDefinition module, Expression<Func<T>> expr)
         {
             return ImportMethodGenericize (module, ((NewExpression)expr.Body).Constructor) ;
         }
 
+        /// <summary>
+        /// Imports the method identified by the lambda expression <paramref name="expr"/>.
+        /// </summary>
+        /// <remarks>
+        /// The lambda expression must have the form (...) => ....Method (...).
+        /// </remarks>
         public static MethodReference Import<T> (this ModuleDefinition module, Expression<Action<T>> expr)
         {
             return ImportMethodGenericize (module, expr.Body) ;
         }
 
+        /// <summary>
+        /// Imports the method identified by the lambda expression <paramref name="expr"/>.
+        /// </summary>
+        /// <remarks>
+        /// The lambda expression must have the form (...) => ....Method (...).
+        /// </remarks>
         public static MethodReference Import<T, U> (this ModuleDefinition module, Expression<Func<T, U>> expr)
         {
             return ImportMethodGenericize (module, expr.Body) ;
@@ -440,6 +475,13 @@ namespace Cil.CompiledTemplates.Cecil
             return obj ;
         }
 
+        /// <summary>
+        /// Indicates whether <paramref name="insn"/> is a simple load instruction.
+        /// </summary>
+        /// <remarks>
+        /// A sequence of simple load instructions can be reordered without changing
+        /// the values they load.
+        /// </remarks>
         public static bool IsSimpleLoad (this Instruction insn)
         {
             switch (insn.OpCode.Code)
@@ -464,59 +506,10 @@ namespace Cil.CompiledTemplates.Cecil
             }
         }
 
-        public static Instruction CopySimpleLoad (this ILProcessor il, Instruction insn)
-        {
-            VariableDefinition  vardef ;
-            ParameterDefinition argdef ;
-            switch (insn.OpCode.Code)
-            {
-            case Code.Ldloc_0:
-            case Code.Ldloc_1:
-            case Code.Ldloc_2:
-            case Code.Ldloc_3:
-            case Code.Ldarg_0:
-            case Code.Ldarg_1:
-            case Code.Ldarg_2:
-            case Code.Ldarg_3:
-                return il.Create (insn.OpCode) ;
-
-            case Code.Ldsfld:
-                return il.Create (insn.OpCode, (FieldReference) insn.Operand) ;
-
-            case Code.Ldloc_S:
-                /**/vardef  = insn.Operand as VariableDefinition ;
-                if (vardef != null)
-                    return il.Create (insn.OpCode, vardef) ;
-
-                return il.Create (insn.OpCode, (byte) insn.Operand) ;
-
-            case Code.Ldarg_S:
-                /**/argdef  = insn.Operand as ParameterDefinition ;
-                if (argdef != null)
-                    return il.Create (insn.OpCode, argdef) ;
-
-                return il.Create (insn.OpCode, (byte) insn.Operand) ;
-
-            case Code.Ldloc:
-                /**/vardef  = insn.Operand as VariableDefinition ;
-                if (vardef != null)
-                    return il.Create (insn.OpCode, vardef) ;
-
-                return il.Create (insn.OpCode, (int) insn.Operand) ;
-
-            case Code.Ldarg:
-                /**/argdef  = insn.Operand as ParameterDefinition ;
-                if (argdef != null)
-                    return il.Create (insn.OpCode, argdef) ;
-
-                return il.Create (insn.OpCode, (int) insn.Operand) ;
-
-            default:
-                throw new InvalidOperationException () ;
-            }
-        }
-
-        public static void SimplifyBranches (this ILProcessor il)
+        /// <summary>
+        /// Simplifies branch instruction macros (Brxxx_S) in <paramref name="il"/> to full forms.
+        /// </summary>
+        public static void SimplifyBranchMacros (this ILProcessor il)
         {
             foreach (var br in il.Body.Instructions)
             switch  (br.OpCode.Code)
@@ -538,16 +531,21 @@ namespace Cil.CompiledTemplates.Cecil
             }
         }
 
+        /// <exclude/>
         public static void Emit (this ILProcessor il, OpCode opcode, ILProcessor method)
         {
             il.Emit (opcode, method.Body.Method) ;
         }
 
+        /// <exclude/>
         public static Instruction Create (this ILProcessor il, OpCode opcode, ILProcessor method)
         {
             return il.Create (opcode, method.Body.Method) ;
         }
 
+        /// <summary>
+        /// Creates a copy of <paramref name="insn"/>.
+        /// </summary>
         public static Instruction Clone (this Instruction insn)
         {
             var newinsn     = Instruction.Create (OpCodes.Nop) ;
@@ -566,9 +564,16 @@ namespace Cil.CompiledTemplates.Cecil
     /// </remarks>
     public sealed class TypeReferenceEqualityComparer : IEqualityComparer<TypeReference>
     {
+        /// <summary>
+        /// Gets the default instance of <see cref="TypeReferenceEqualityComparer"/>.
+        /// </summary>
         public static readonly TypeReferenceEqualityComparer Instance = new TypeReferenceEqualityComparer () ;
 
         #region --[Interface: IEqualityComparer<>]------------------------
+        /// <summary>
+        /// Indicates whether the type reference <paramref name="a"/>
+        /// refers to the CLR type <paramref name="b"/>.
+        /// </summary>
         public bool Equals (TypeReference a, Type b)
         {
             if (a == null)
@@ -614,6 +619,9 @@ namespace Cil.CompiledTemplates.Cecil
             return a.FullName == b.FullName && a.Scope.GetFullName () == b.Assembly.FullName ;
         }
 
+        /// <summary>
+        /// Indicates whether the two type references refer to the same type.
+        /// </summary>
         public bool Equals (TypeReference a, TypeReference b)
         {
             if (a == null)
@@ -651,6 +659,10 @@ namespace Cil.CompiledTemplates.Cecil
             return a.FullName == b.FullName && a.DeclaringType.SameAs (b.DeclaringType) && a.Scope.SameAs (b.Scope) ;
         }
 
+        /// <summary>
+        /// Gets a hash code for <paramref name="obj"/> that is compatible
+        /// with the equality relation defined by this comparer.
+        /// </summary>
         public int GetHashCode (TypeReference obj)
         {
             if (obj == null) return 0 ;

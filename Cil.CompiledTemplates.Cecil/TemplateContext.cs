@@ -22,6 +22,9 @@ using Mono.Cecil.Rocks   ;
 
 namespace Cil.CompiledTemplates.Cecil
 {
+    /// <summary>
+    /// Represents a single template application to a single target type.
+    /// </summary>
     public sealed class TemplateContext : TemplateContextBase
     {
         #region --[Fields: Private]---------------------------------------
@@ -40,12 +43,19 @@ namespace Cil.CompiledTemplates.Cecil
         private readonly static OpCode[] TwoBytesOpCode = (OpCode[]) typeof (OpCodes).GetField (nameof (TwoBytesOpCode), BindingFlags.Static | BindingFlags.NonPublic).GetValue (null) ;
         #endregion
 
+        /// <summary>
+        /// Gets the target type definition that was supplied
+        /// to the constructor.
+        /// </summary>
         public TypeDefinition Target
         {
             get { return m_target ; }
         }
 
         #region --[Constructors]------------------------------------------
+        /// <summary>
+        /// Creates a new <see cref="TemplateContext"/>.
+        /// </summary>
         public TemplateContext (Type template, TypeDefinition target) : base (template)
         {
             if (template.IsGenericType || target.HasGenericParameters)
@@ -73,16 +83,41 @@ namespace Cil.CompiledTemplates.Cecil
         #endregion
 
         #region --[Methods: context manipulation]-------------------------
+        /// <summary>
+        /// Binds the templated type <paramref name="template"/> to <paramref name="type"/>.
+        /// </summary>
+        /// <remarks>
+        /// <paramref name="type"/> may be a template type, another templated type
+        /// or a plain .NET type.
+        /// </remarks>
         public void Bind (Type template, Type type)
         {
             Add (GetTemplatedType (template), GetType (type)) ;
         }
 
+        /// <summary>
+        /// Binds the templated type <paramref name="template"/> to <paramref name="type"/>.
+        /// </summary>
+        /// <remarks>
+        /// The type referred to by <paramref name="type"/> can be defined anywhere,
+        /// but the reference must belong to the target module.
+        /// </remarks>
         public void Bind (Type template, TypeReference type)
         {
             Add (GetTemplatedType (template), type) ;
         }
 
+        /// <summary>
+        /// Binds the templated field identified by the lambda expression <paramref name="func"/>
+        /// to <paramref name="field"/>.
+        /// </summary>
+        /// <remarks>
+        /// <paramref name="field"/> must be an instance field if the templated field
+        /// is an instance field, and a static field if the templated field is static.
+        /// <para/>
+        /// The field referred to by <paramref name="field"/> can be defined anywhere,
+        /// but the reference must belong to the target module.
+        /// </remarks>
         public void BindField<T> (Expression<Func<T>> func, FieldReference field)
         {
             var templatedField = GetTemplatedField (func, enforceIsStatic: field.Resolve ().IsStatic) ;
@@ -95,29 +130,76 @@ namespace Cil.CompiledTemplates.Cecil
             Add (templatedField, field) ;
         }
 
+        /// <summary>
+        /// Binds the templated field identified by the lambda expression <paramref name="func"/>
+        /// to the special <paramref name="action"/>.
+        /// </summary>
+        /// <remarks>
+        /// <paramref name="action"/> can manipulate the instruction referring
+        /// to the templated field and emit additional instructions.
+        /// </remarks>
         public void BindField<T> (Expression<Func<T>> func, Action<ILProcessor, Instruction> action)
         {
             Add (GetTemplatedField (func), action) ;
         }
 
+        /// <summary>
+        /// Binds the templated static field identified by the lambda expression <paramref name="func"/>
+        /// to the local variable <paramref name="local"/>.
+        /// </summary>
+        /// <remarks>
+        /// The bound local variable can be used only in the method where it is declared.
+        /// </remarks>
         public void BindField<T> (Expression<Func<T>> func, VariableDefinition local)
         {
             Add (GetTemplatedField (func, enforceIsStatic: true), local) ;
         }
 
+        /// <summary>
+        /// Binds the templated static delegate-typed field
+        /// identified by the lambda expression <paramref name="func"/>
+        /// to the static method <paramref name="method"/>.
+        /// </summary>
+        /// <remarks>
+        /// Loads of the templated field will be replaced by instructions
+        /// creating a delegate from the supplied method.
+        /// The type of the delegate is the bound type of the templated field.
+        /// </remarks>
         public void BindField<T> (Expression<Func<T>> func, MethodReference method)
         {
             if (method != null && method.HasThis)
                 throw new ArgumentOutOfRangeException (nameof (method)) ;
 
-            Add (GetTemplatedField (func, enforceIsStatic: true), method ?? NullMethod) ;
+            var template = GetTemplatedField (func, enforceIsStatic: true) ;
+            if (!typeof (Delegate).IsAssignableFrom (template.FieldType))
+                throw new ArgumentOutOfRangeException (nameof (func)) ;
+
+            Add (template, method ?? NullMethod) ;
         }
 
+        /// <summary>
+        /// Binds the templated method identified by the lambda expression <paramref name="expr"/>
+        /// to <paramref name="method"/>.
+        /// </summary>
+        /// <remarks>
+        /// The methods may be instance or static, but their lists of parameters
+        /// including the implicit <c>this</c> parameter must be compatible
+        /// or the resulting IL will be illegal or unverifiable.
+        /// </remarks>
         public void Bind_ (Expression<Action> expr, MethodReference method)
         {
             Add (GetTemplatedMethod (expr), method) ;
         }
 
+        /// <summary>
+        /// Binds the templated method that is the target of the supplied delegate
+        /// to <paramref name="method"/>.
+        /// </summary>
+        /// <remarks>
+        /// The methods may be instance or static, but their lists of parameters
+        /// including the implicit <c>this</c> parameter must be compatible
+        /// or the resulting IL will be illegal or unverifiable.
+        /// </remarks>
         public void Bind<T> (Func<T> func, MethodReference method)
         {
             Add (GetTemplatedMethod (func.Method, null), method) ;
@@ -125,6 +207,9 @@ namespace Cil.CompiledTemplates.Cecil
         #endregion
 
         #region --[Methods: template application]-------------------------
+        /// <summary>
+        /// Finalizes methods generated or modified by the template.
+        /// </summary>
         public void Commit ()
         {
             foreach (var il in m_splices.Keys)
@@ -134,6 +219,7 @@ namespace Cil.CompiledTemplates.Cecil
                 kv.Key.Body.Method.DebugInformation.Scope = kv.Value.ToCecil () ;
         }
 
+        /// <inherit/>
         public override void CopyExplicitInterfaceImpl (Type type)
         {
             var fixups = new Dictionary<MethodBase, Action<MethodDefinition>> () ;
@@ -191,6 +277,7 @@ namespace Cil.CompiledTemplates.Cecil
                 m_target.Module.ImportReference (type))) ;
         }
 
+        /// <inherit/>
         public override void CopyNested (Type type)
         {
             // TODO: multi-level nesting
@@ -225,6 +312,7 @@ namespace Cil.CompiledTemplates.Cecil
             m_dictionary = m_dictionary.Add (template, newtype) ;
         }
 
+        /// <inherit/>
         protected override void CopyField (FieldInfo field)
         {
             var template = field ;
@@ -254,22 +342,38 @@ namespace Cil.CompiledTemplates.Cecil
             m_dictionary = m_dictionary.Add (template, newfield) ;
         }
 
+        /// <inherit/>
         protected override void CopyMethod (MethodBase method, System.Reflection.MethodAttributes? attribs)
         {
             CopyMethodInternal (method, attribs) ;
         }
 
         #region public ILProcessor CreateMethodBuilder (...)
+        /// <summary>
+        /// Creates a new, empty method from the template method
+        /// that is the target of the supplied delegate
+        /// and returns a <see cref="ILProcessor"/> for it.
+        /// </summary>
         public ILProcessor CreateMethodBuilder<T> (Action<T> d)
         {
             return CreateMethodBuilder (d.Method, null).Item1.Body.GetILProcessor () ;
         }
 
+        /// <summary>
+        /// Creates a new, empty method from the template method
+        /// that is the target of the supplied delegate
+        /// and returns a <see cref="ILProcessor"/> for it.
+        /// </summary>
         public ILProcessor CreateMethodBuilder (Action d)
         {
             return CreateMethodBuilder (d.Method, null).Item1.Body.GetILProcessor () ;
         }
 
+        /// <summary>
+        /// Creates a new, empty method from the template method
+        /// identified by the lambda expression <paramref name="expr"/>
+        /// and returns a <see cref="ILProcessor"/> for it.
+        /// </summary>
         public ILProcessor CreateMethodBuilder_ (Expression<Action> expr, System.Reflection.MethodAttributes? attribs = null)
         {
             var fex  = expr.Body as MethodCallExpression ;
@@ -285,26 +389,71 @@ namespace Cil.CompiledTemplates.Cecil
         #endregion
 
         #region public void Splice (ILProcessor il, Instruction before, ...)
+        /// <summary>
+        /// Splices the template method that is the target of the supplied delegate
+        /// into <paramref name="il"/> at the indicated location.
+        /// <para/>
+        /// Templated method parameters that are not marked <see cref="FromILStackAttribute"/>,
+        /// including the implicit <c>this</c> parameter
+        /// if the template method has the <see cref="TemplatedThisAttribute"/>,
+        /// are bound to the elements of <paramref name="templatedArguments"/> in order.
+        /// </summary>
         public void Splice<P1, T> (ILProcessor il, SpliceLocation location, Func<P1, T> d, params object[] templatedArguments)
         {
             SpliceMethod (d.Method, il, location, templatedArguments) ;
         }
 
+        /// <summary>
+        /// Splices the template method that is the target of the supplied delegate
+        /// into <paramref name="il"/> at the indicated location.
+        /// <para/>
+        /// Templated method parameters that are not marked <see cref="FromILStackAttribute"/>,
+        /// including the implicit <c>this</c> parameter
+        /// if the template method has the <see cref="TemplatedThisAttribute"/>,
+        /// are bound to the elements of <paramref name="templatedArguments"/> in order.
+        /// </summary>
         public void Splice<T> (ILProcessor il, SpliceLocation location, Func<T> d, params object[] templatedArguments)
         {
             SpliceMethod (d.Method, il, location, templatedArguments) ;
         }
 
+        /// <summary>
+        /// Splices the template method that is the target of the supplied delegate
+        /// into <paramref name="il"/> at the indicated location.
+        /// <para/>
+        /// Templated method parameters that are not marked <see cref="FromILStackAttribute"/>,
+        /// including the implicit <c>this</c> parameter
+        /// if the template method has the <see cref="TemplatedThisAttribute"/>,
+        /// are bound to the elements of <paramref name="templatedArguments"/> in order.
+        /// </summary>
         public void Splice<T> (ILProcessor il, SpliceLocation location, Action<T> d, params object[] templatedArguments)
         {
             SpliceMethod (d.Method, il, location, templatedArguments) ;
         }
 
+        /// <summary>
+        /// Splices the template method that is the target of the supplied delegate
+        /// into <paramref name="il"/> at the indicated location.
+        /// <para/>
+        /// Templated method parameters that are not marked <see cref="FromILStackAttribute"/>,
+        /// including the implicit <c>this</c> parameter
+        /// if the template method has the <see cref="TemplatedThisAttribute"/>,
+        /// are bound to the elements of <paramref name="templatedArguments"/> in order.
+        /// </summary>
         public void Splice (ILProcessor il, SpliceLocation location, Action d, params object[] templatedArguments)
         {
             SpliceMethod (d.Method, il, location, templatedArguments) ;
         }
 
+        /// <summary>
+        /// Splices the template method identified by the lambda expression <paramref name="expr"/>
+        /// into <paramref name="il"/> at the indicated location.
+        /// <para/>
+        /// Templated method parameters that are not marked <see cref="FromILStackAttribute"/>,
+        /// including the implicit <c>this</c> parameter
+        /// if the template method has the <see cref="TemplatedThisAttribute"/>,
+        /// are bound to the elements of <paramref name="templatedArguments"/> in order.
+        /// </summary>
         public void Splice_ (ILProcessor il, SpliceLocation location, Expression<Action> expr, params object[] templatedArguments)
         {
             var fex  = expr.Body as MethodCallExpression ;
@@ -1174,6 +1323,7 @@ namespace Cil.CompiledTemplates.Cecil
             return (TypeReference) base.GetType (type) ;
         }
 
+        /// <inherit/>
         protected override object GetTypeInternal (Type type)
         {
             object value ;

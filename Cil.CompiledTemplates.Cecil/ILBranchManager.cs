@@ -18,6 +18,9 @@ using Mono.Cecil.Cil ;
 
 namespace Cil.CompiledTemplates.Cecil
 {
+    /// <summary>
+    /// A class that helps to manage IL branch targets.
+    /// </summary>
     public class ILBranchManager
     {
         #region --[Fields: Private]---------------------------------------
@@ -55,7 +58,7 @@ namespace Cil.CompiledTemplates.Cecil
             }
 
             // KLUDGE: make all branches long to avoid out-of-range after modification
-            il.SimplifyBranches () ;
+            il.SimplifyBranchMacros () ;
         }
 
         /// <summary>
