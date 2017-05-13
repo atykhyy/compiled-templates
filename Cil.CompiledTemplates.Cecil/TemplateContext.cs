@@ -362,7 +362,7 @@ namespace Cil.CompiledTemplates.Cecil
 
             for ( ; p < parameters.Length ; ++p)
             {
-                if (parameters[p].IsDefined (typeof (TemplatedMemberAttribute)))
+                if (parameters[p].IsDefined (typeof (TemplatedParameterAttribute)))
                     break ;
 
                 if (parameters[p].IsDefined (typeof (FromILStackAttribute)))
@@ -379,7 +379,7 @@ namespace Cil.CompiledTemplates.Cecil
 
             for ( ; p < parameters.Length ; ++p, ++a)
             {
-                if(!parameters[p].IsDefined (typeof (TemplatedMemberAttribute)))
+                if(!parameters[p].IsDefined (typeof (TemplatedParameterAttribute)))
                     throw new InvalidOperationException () ; // templated parameters must follow non-templated parameters
 
                 if (parameters[p].IsDefined (typeof (FromILStackAttribute)))
@@ -583,7 +583,7 @@ namespace Cil.CompiledTemplates.Cecil
             for (var p = 0 ; p < parameters.Length ; ++p)
             {
                 // remove templated parameters
-                if (parameters[p].IsDefined (typeof (TemplatedMemberAttribute)))
+                if (parameters[p].IsDefined (typeof (TemplatedParameterAttribute)))
                 {
                     templatedParams++ ;
                 }

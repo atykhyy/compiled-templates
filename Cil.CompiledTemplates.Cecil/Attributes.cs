@@ -99,7 +99,13 @@ namespace Cil.CompiledTemplates.Cecil
         public Type[] Labels    { get ; private set ; }
     }
 
+    [AttributeUsage (AttributeTargets.All & ~(AttributeTargets.Parameter | AttributeTargets.ReturnValue))]
     public sealed class TemplatedMemberAttribute : Attribute
+    {
+    }
+
+    [AttributeUsage (AttributeTargets.Parameter)]
+    public sealed class TemplatedParameterAttribute : Attribute
     {
     }
 
