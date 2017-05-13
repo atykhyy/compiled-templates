@@ -7,29 +7,36 @@
   </PropertyGroup>
   <Import Project="SharedBuildProperties.props.user" Condition="Exists('SharedBuildProperties.props.user')" />
   <Target Name="VersionInject" BeforeTargets="PrepareForBuild"
-    Condition=" '$(Configuration)' == 'Release' And !$(DefineConstants.Contains('NOASSEMBLYVERSION')) ">
+    Condition=" !$(DefineConstants.Contains('NOASSEMBLYVERSION')) ">
 
     <!-- get revision number -->
-    <Exec Command="hg.exe log -l 1 ." ConsoleToMSBuild="true">
-      <Output TaskParameter="ConsoleOutput" PropertyName="AVI_HgLog" />
+    <Exec Command="git.exe describe" ConsoleToMSBuild="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="AVI_GitTag" />
     </Exec>
     <!-- get old version string -->
     <ReadLinesFromFile File="Properties\AssemblyInfoVersion.cs">
       <Output TaskParameter="Lines" PropertyName="AVI_Old"/>  
     </ReadLinesFromFile>
     <!-- get base version number and construct new version string -->
-    <XmlPeek XmlInputPath="$(SolutionDir)NuGet\$(MSBuildProjectName).nuspec" Query="/package/metadata/version/text()">
+    <XmlPeek XmlInputPath="$(MSBuildThisFileDirectory)NuGet\$(MSBuildProjectName).nuspec" Query="/package/metadata/version/text()">
       <Output TaskParameter="Result" PropertyName="AVI_Ver" />
     </XmlPeek>
     <PropertyGroup>
-      <AVI_Idx>$([MSBuild]::Add($(AVI_HgLog.IndexOf(':')),1))</AVI_Idx>
-      <AVI_HgId>$(AVI_HgLog.Substring($(AVI_Idx),$([MSBuild]::Subtract($(AVI_HgLog.IndexOf(';')),$(AVI_Idx)))).Trim())</AVI_HgId>
-      <AVI_Idx>$(AVI_HgId.IndexOf(':'))</AVI_Idx>
-      <AVI_Ver>$(AVI_Ver).$(AVI_HgId.Substring(0,$(AVI_Idx)))</AVI_Ver>
-      <AVI_Commit>$(AVI_HgId.Substring($(AVI_Idx)).Trim(':'))</AVI_Commit>
-      <AVI_New>[assembly:System.Reflection.AssemblyFileVersion(&quot;$(AVI_Ver)&quot;),<!--
-                      -->System.Reflection.AssemblyInformationalVersion(&quot;$(AVI_Ver), commit $(AVI_Commit)&quot;)]</AVI_New>
+      <AVI_Idx>$(AVI_Ver.IndexOf(`-`))</AVI_Idx>
     </PropertyGroup>
+    <PropertyGroup Condition="$(AVI_Idx) &gt;= 0"><!-- pre-release -->
+      <AVI_Suffix>$(AVI_Ver.Substring($(AVI_Idx)))</AVI_Suffix>
+      <AVI_Ver>$(AVI_Ver.Substring(0,$(AVI_Idx)))</AVI_Ver>
+    </PropertyGroup>
+    <PropertyGroup>
+      <AVI_Rgx>^$(AVI_Ver.Replace(`.`,`\.`))\.(\d+)$(AVI_Suffix)($|-\d+-g([0-9a-f]+))</AVI_Rgx>
+      <AVI_Rev>$([System.Text.RegularExpressions.Regex]::Match($(AVI_GitTag),$(AVI_Rgx)).Groups.get_Item(1))</AVI_Rev>
+      <AVI_Commit>$([System.Text.RegularExpressions.Regex]::Match($(AVI_GitTag),$(AVI_Rgx)).Groups.get_Item(3))</AVI_Commit>
+      <AVI_Ver>$(AVI_Ver).$(AVI_Rev)</AVI_Ver>
+      <AVI_New>[assembly:System.Reflection.AssemblyFileVersion(&quot;$(AVI_Ver)&quot;),<!--
+                      -->System.Reflection.AssemblyInformationalVersion(&quot;$(AVI_Ver)$(AVI_Suffix), commit $(AVI_Commit)&quot;)]</AVI_New>
+    </PropertyGroup>
+    <Error Text="Tag $(AVI_GitTag) does not match .nuspec version $(AVI_Ver)" Condition=" '$(AVI_Rev)' == '' " />
     <!-- rewrite version file if version changed -->
     <WriteLinesToFile File="Properties\AssemblyInfoVersion.cs" Overwrite="true" Lines="$(AVI_New)"
       Condition=" '$(AVI_Old)' != '$(AVI_New)' " />

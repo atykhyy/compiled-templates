@@ -8,4 +8,5 @@ obj
 **/test-results/*
 packages
 TestResults
+AssemblyInfoVersion.cs
 .vs/

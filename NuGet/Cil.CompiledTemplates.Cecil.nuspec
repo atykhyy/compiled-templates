@@ -3,8 +3,8 @@
   <metadata>
     <id>Cil.CompiledTemplates.Cecil</id>
     <title>Cil.CompiledTemplates.Cecil</title>
-    <version>0.1</version>
-    <authors>Anton Tykhyi</authors>
+    <version>0.1-alpha</version>
+    <authors>Anton Tykhyy</authors>
     <copyright>&#xa9; 2017 Anton Tykhyy</copyright>
     <licenseUrl>http://opensource.org/licenses/mit-license.php</licenseUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
@@ -16,6 +16,7 @@
     <tags>assembly assemblies module modules il cil msil bytecode reflection injection cecil aop postcompile weaving template templates</tags>
     <dependencies>
       <dependency id="System.Collections.Immutable" version="1.1" />
+      <dependency id="Mono.Cecil" version="0.10.0-beta5" />
     </dependencies>
   </metadata>
   <files>
