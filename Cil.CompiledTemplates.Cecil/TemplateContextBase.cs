@@ -183,7 +183,7 @@ namespace Cil.CompiledTemplates.Cecil
             /**/m_dictionary = m_dictionary.Add (s_label, labels) ;
             try
             {
-                CopyLabels (m_template, labels) ;
+                CopyLabels (m_template, labels, new HashSet<Type> ()) ;
             }
             finally
             {
@@ -206,10 +206,13 @@ namespace Cil.CompiledTemplates.Cecil
             }
         }
 
-        private void CopyLabels (Type template, HashSet<Type> labels)
+        private void CopyLabels (Type template, HashSet<Type> labels, HashSet<Type> templates)
         {
+            if (!templates.Add (template))
+                return ;
+
             if (template.BaseType.Assembly != typeof (object).Assembly)
-                CopyLabels (template.BaseType, labels) ;
+                CopyLabels (template.BaseType, labels, templates) ;
 
             var all = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly ;
 
@@ -221,7 +224,7 @@ namespace Cil.CompiledTemplates.Cecil
                     MatchesLabel (type, labels))
                     CopyNested   (type) ;
 
-                /**/CopyLabels   (type, labels) ;
+                /**/CopyLabels   (type, labels, templates) ;
             }
 
             foreach (var ctor in template.GetConstructors (all))
