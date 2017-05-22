@@ -39,8 +39,8 @@ namespace Cil.CompiledTemplates.Cecil
 
         public Scope (ScopeDebugInformation scope, Dictionary<int, Instruction> insns)
         {
-            insns.TryGetValue (scope.Start.Offset, out m_start) ;
-            insns.TryGetValue (scope.End.Offset,   out m_end)   ;
+            m_start =                                  insns[scope.Start.Offset] ;
+            m_end   = scope.End.IsEndOfMethod ? null : insns[scope.End.Offset]   ;
 
             m_variables = new List<VariableDebugInformation> (scope.Variables) ;
 
@@ -109,8 +109,12 @@ namespace Cil.CompiledTemplates.Cecil
         {
             if (body.Method.DebugInformation.Scope != null)
             {
-                return new Scope (body.Method.DebugInformation.Scope,
-                    body.Instructions.ToDictionary (_ => _.Offset)) ;
+                var insns = body.Instructions.ToDictionary (_ => _.Offset) ;
+
+                if (body.CodeSize != 0)
+                    insns.Add (body.CodeSize, null) ;
+
+                return new Scope (body.Method.DebugInformation.Scope, insns) ;
             }
             else
                 return new Scope (body.Instructions.FirstOrDefault (), null) ;
