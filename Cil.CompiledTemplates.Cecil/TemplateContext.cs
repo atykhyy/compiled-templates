@@ -18,6 +18,8 @@ using System.Reflection  ;
 using Mono.Cecil         ;
 using Mono.Cecil.Cil     ;
 using Mono.Cecil.Rocks   ;
+
+using SR = System.Reflection ;
 #endregion
 
 namespace Cil.CompiledTemplates.Cecil
@@ -278,14 +280,14 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <inherit/>
-        public override void CopyNested (Type type)
+        public override void CopyNested (Type type, SR.TypeAttributes set = 0, SR.TypeAttributes clear = 0)
         {
             // TODO: multi-level nesting
             if (!type.IsNested || !type.DeclaringType.IsAssignableFrom (m_template))
                 throw new ArgumentOutOfRangeException (nameof (type)) ;
 
             var template = type ;
-            var newtype  = new TypeDefinition (null, template.Name, (Mono.Cecil.TypeAttributes) template.Attributes) ;
+            var newtype  = new TypeDefinition (null, template.Name, (Mono.Cecil.TypeAttributes)((template.Attributes & ~clear) | set)) ;
 
             var emitAttr  = type.GetCustomAttribute<EmitNameAttribute> () ;
             if (emitAttr != null)
@@ -343,9 +345,9 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <inherit/>
-        protected override void CopyMethod (MethodBase method, System.Reflection.MethodAttributes? attribs)
+        protected override void CopyMethod (MethodBase method, SR.MethodAttributes set = 0, SR.MethodAttributes clear = 0)
         {
-            CopyMethodInternal (method, attribs) ;
+            CopyMethodInternal (method, set, clear) ;
         }
 
         #region public ILProcessor CreateMethodBuilder (...)
@@ -354,9 +356,9 @@ namespace Cil.CompiledTemplates.Cecil
         /// that is the target of the supplied delegate
         /// and returns a <see cref="ILProcessor"/> for it.
         /// </summary>
-        public ILProcessor CreateMethodBuilder<T> (Action<T> d)
+        public ILProcessor CreateMethodBuilder<T> (Action<T> d, SR.MethodAttributes set = 0, SR.MethodAttributes clear = 0)
         {
-            return CreateMethodBuilder (d.Method, null).Item1.Body.GetILProcessor () ;
+            return CreateMethodBuilder (d.Method, set, clear).Item1.Body.GetILProcessor () ;
         }
 
         /// <summary>
@@ -364,9 +366,9 @@ namespace Cil.CompiledTemplates.Cecil
         /// that is the target of the supplied delegate
         /// and returns a <see cref="ILProcessor"/> for it.
         /// </summary>
-        public ILProcessor CreateMethodBuilder (Action d)
+        public ILProcessor CreateMethodBuilder (Action d, SR.MethodAttributes set = 0, SR.MethodAttributes clear = 0)
         {
-            return CreateMethodBuilder (d.Method, null).Item1.Body.GetILProcessor () ;
+            return CreateMethodBuilder (d.Method, set, clear).Item1.Body.GetILProcessor () ;
         }
 
         /// <summary>
@@ -374,15 +376,15 @@ namespace Cil.CompiledTemplates.Cecil
         /// identified by the lambda expression <paramref name="expr"/>
         /// and returns a <see cref="ILProcessor"/> for it.
         /// </summary>
-        public ILProcessor CreateMethodBuilder_ (Expression<Action> expr, System.Reflection.MethodAttributes? attribs = null)
+        public ILProcessor CreateMethodBuilder_ (Expression<Action> expr, SR.MethodAttributes set = 0, SR.MethodAttributes clear = 0)
         {
             var fex  = expr.Body as MethodCallExpression ;
             if (fex != null)
-                return CreateMethodBuilder (GetMethodInType (fex.Method, fex.Object?.Type), attribs).Item1.Body.GetILProcessor () ;
+                return CreateMethodBuilder (GetMethodInType (fex.Method, fex.Object?.Type), set, clear).Item1.Body.GetILProcessor () ;
 
             var nex  = expr.Body as NewExpression ;
             if (nex != null)
-                return CreateMethodBuilder (nex.Constructor, attribs).Item1.Body.GetILProcessor () ;
+                return CreateMethodBuilder (nex.Constructor, set, clear).Item1.Body.GetILProcessor () ;
 
             throw new ArgumentOutOfRangeException (nameof (expr)) ;
         }
@@ -704,10 +706,10 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         private Tuple<MethodDefinition, MethodBase, MethodBase, Dictionary<object, object>> CreateMethodBuilder (
-            MethodBase from, System.Reflection.MethodAttributes? attribs = null)
+            MethodBase from, SR.MethodAttributes set, SR.MethodAttributes clear)
         {
             // TODO: return "parameter" CAs?
-            var to = new MethodDefinition (GetEmitName (from), (Mono.Cecil.MethodAttributes)(attribs ?? from.Attributes), GetType (from.GetReturnType ()))
+            var to = new MethodDefinition (GetEmitName (from), (Mono.Cecil.MethodAttributes)((from.Attributes & ~clear) | set), GetType (from.GetReturnType ()))
             {
                 HasThis           = (from.CallingConvention & CallingConventions.HasThis)      != 0,
                 ExplicitThis      = (from.CallingConvention & CallingConventions.ExplicitThis) != 0,
@@ -775,9 +777,9 @@ namespace Cil.CompiledTemplates.Cecil
             return Tuple.Create (to, from, fromTemplate, dictionary) ;
         }
 
-        private MethodDefinition CopyMethodInternal (MethodBase source, System.Reflection.MethodAttributes? attribs = null)
+        private MethodDefinition CopyMethodInternal (MethodBase source, SR.MethodAttributes set = 0, SR.MethodAttributes clear = 0)
         {
-            var tuple        = CreateMethodBuilder (source, attribs) ;
+            var tuple        = CreateMethodBuilder (source, set, clear) ;
             var to           = tuple.Item1 ;
             var from         = tuple.Item2 ;
             var fromTemplate = tuple.Item3 ;
@@ -786,7 +788,7 @@ namespace Cil.CompiledTemplates.Cecil
             m_dictionary = m_dictionary.Add (fromTemplate, to) ;
 
             var fromBody  = from.GetMethodBody () ;
-            if (fromBody == null)
+            if (fromBody == null || to.IsAbstract)
                 return to ;
 
             to.Body.MaxStackSize = fromBody.MaxStackSize ;

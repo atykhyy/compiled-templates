@@ -229,11 +229,11 @@ namespace Cil.CompiledTemplates.Cecil
 
             foreach (var ctor in template.GetConstructors (all))
                 if (MatchesLabel (ctor, labels) || MatchesLabelInParams (ctor, labels))
-                    CopyMethod   (ctor) ;
+                    CopyMethod   (ctor, 0, 0) ;
 
             foreach (var meth in template.GetMethods (all | BindingFlags.Static))
                 if (MatchesLabel (meth, labels) || MatchesLabelInParams (meth, labels))
-                    CopyMethod   (meth) ;
+                    CopyMethod   (meth, 0, 0) ;
 
             foreach (var field in template.GetFields (all | BindingFlags.Static))
                 if (MatchesLabel (field, labels))
@@ -277,7 +277,7 @@ namespace Cil.CompiledTemplates.Cecil
         /// <summary>
         /// Copies the nested template type <paramref name="type"/>.
         /// </summary>
-        public abstract void CopyNested (Type type) ;
+        public abstract void CopyNested (Type type, TypeAttributes set = 0, TypeAttributes clear = 0) ;
 
         /// <summary>
         /// Copies all members comprising the explicit implementation
@@ -300,69 +300,69 @@ namespace Cil.CompiledTemplates.Cecil
 
         protected abstract void CopyField (FieldInfo field) ;
 
-        #region public void CopyMethod (..., MethodAttributes? attribs = null)
+        #region public void CopyMethod (..., MethodAttributes set = 0, MethodAttributes clear = 0)
         /// <summary>
         /// Copies the template method that is the target of the supplied delegate.
         /// </summary>
-        public void CopyMethod<P1, P2, P3, T> (Func<P1, P2, P3, T> d, MethodAttributes? attribs = null)
+        public void CopyMethod<P1, P2, P3, T> (Func<P1, P2, P3, T> d, MethodAttributes set = 0, MethodAttributes clear = 0)
         {
-            CopyMethod (d.Method, attribs) ;
+            CopyMethod (d.Method, set, clear) ;
         }
 
         /// <summary>
         /// Copies the template method that is the target of the supplied delegate.
         /// </summary>
-        public void CopyMethod<P1, P2, T> (Func<P1, P2, T> d, MethodAttributes? attribs = null)
+        public void CopyMethod<P1, P2, T> (Func<P1, P2, T> d, MethodAttributes set = 0, MethodAttributes clear = 0)
         {
-            CopyMethod (d.Method, attribs) ;
+            CopyMethod (d.Method, set, clear) ;
         }
 
         /// <summary>
         /// Copies the template method that is the target of the supplied delegate.
         /// </summary>
-        public void CopyMethod<P1, T> (Func<P1, T> d, MethodAttributes? attribs = null)
+        public void CopyMethod<P1, T> (Func<P1, T> d, MethodAttributes set = 0, MethodAttributes clear = 0)
         {
-            CopyMethod (d.Method, attribs) ;
+            CopyMethod (d.Method, set, clear) ;
         }
 
         /// <summary>
         /// Copies the template method that is the target of the supplied delegate.
         /// </summary>
-        public void CopyMethod<T> (Func<T> d, MethodAttributes? attribs = null)
+        public void CopyMethod<T> (Func<T> d, MethodAttributes set = 0, MethodAttributes clear = 0)
         {
-            CopyMethod (d.Method, attribs) ;
+            CopyMethod (d.Method, set, clear) ;
         }
 
         /// <summary>
         /// Copies the template method that is the target of the supplied delegate.
         /// </summary>
-        public void CopyMethod<P1, P2, P3> (Action<P1, P2, P3> d, MethodAttributes? attribs = null)
+        public void CopyMethod<P1, P2, P3> (Action<P1, P2, P3> d, MethodAttributes set = 0, MethodAttributes clear = 0)
         {
-            CopyMethod (d.Method, attribs) ;
+            CopyMethod (d.Method, set, clear) ;
         }
 
         /// <summary>
         /// Copies the template method that is the target of the supplied delegate.
         /// </summary>
-        public void CopyMethod<P1, P2> (Action<P1, P2> d, MethodAttributes? attribs = null)
+        public void CopyMethod<P1, P2> (Action<P1, P2> d, MethodAttributes set = 0, MethodAttributes clear = 0)
         {
-            CopyMethod (d.Method, attribs) ;
+            CopyMethod (d.Method, set, clear) ;
         }
 
         /// <summary>
         /// Copies the template method that is the target of the supplied delegate.
         /// </summary>
-        public void CopyMethod<P1> (Action<P1> d, MethodAttributes? attribs = null)
+        public void CopyMethod<P1> (Action<P1> d, MethodAttributes set = 0, MethodAttributes clear = 0)
         {
-            CopyMethod (d.Method, attribs) ;
+            CopyMethod (d.Method, set, clear) ;
         }
 
         /// <summary>
         /// Copies the template method that is the target of the supplied delegate.
         /// </summary>
-        public void CopyMethod (Action d, MethodAttributes? attribs = null)
+        public void CopyMethod (Action d, MethodAttributes set = 0, MethodAttributes clear = 0)
         {
-            CopyMethod (d.Method, attribs) ;
+            CopyMethod (d.Method, set, clear) ;
         }
         #endregion
 
@@ -370,19 +370,19 @@ namespace Cil.CompiledTemplates.Cecil
         /// Copies the template method
         /// identified by the lambda expression <paramref name="expr"/>.
         /// </summary>
-        public void CopyMethod_ (Expression<Action> expr, MethodAttributes? attribs = null)
+        public void CopyMethod_ (Expression<Action> expr, MethodAttributes set = 0, MethodAttributes clear = 0)
         {
             var fex  = expr.Body as MethodCallExpression ;
             if (fex != null)
             {
-                CopyMethod (GetMethodInType (fex.Method, fex.Object?.Type), attribs) ;
+                CopyMethod (GetMethodInType (fex.Method, fex.Object?.Type), set, clear) ;
                 return ;
             }
 
             var nex  = expr.Body as NewExpression ;
             if (nex != null)
             {
-                CopyMethod (nex.Constructor, attribs) ;
+                CopyMethod (nex.Constructor, set, clear) ;
                 return ;
             }
 
@@ -393,29 +393,33 @@ namespace Cil.CompiledTemplates.Cecil
         /// Copies the template property getter
         /// identified by the lambda expression <paramref name="expr"/>.
         /// </summary>
-        public void CopyGetter_<T> (Expression<Func<T>> expr, MethodAttributes? attribs = null)
+        public void CopyGetter_<T> (Expression<Func<T>> expr, MethodAttributes set = 0, MethodAttributes clear = 0)
         {
             var mex  = expr.Body as MemberExpression ;
             if (mex == null || mex.Member.MemberType != MemberTypes.Property)
                 throw new ArgumentOutOfRangeException (nameof (expr)) ;
 
-            CopyMethod (GetMethodInType (((PropertyInfo) mex.Member).GetGetMethod (), mex.Expression?.Type), attribs) ;
+            CopyMethod (GetMethodInType (((PropertyInfo) mex.Member).GetGetMethod (), mex.Expression?.Type), set, clear) ;
         }
 
         /// <summary>
         /// Copies the template property setter
         /// identified by the lambda expression <paramref name="expr"/>.
         /// </summary>
-        public void CopySetter_<T> (Expression<Func<T>> expr, MethodAttributes? attribs = null)
+        public void CopySetter_<T> (Expression<Func<T>> expr, MethodAttributes set = 0, MethodAttributes clear = 0)
         {
             // limitation: property must have a getter, or expression will not compile
             var mex  = expr.Body as MemberExpression ;
             if (mex == null || mex.Member.MemberType != MemberTypes.Property)
                 throw new ArgumentOutOfRangeException (nameof (expr)) ;
 
-            CopyMethod (GetMethodInType (((PropertyInfo) mex.Member).GetSetMethod (), mex.Expression?.Type), attribs) ;
+            CopyMethod (GetMethodInType (((PropertyInfo) mex.Member).GetSetMethod (), mex.Expression?.Type), set, clear) ;
         }
 
+        protected abstract void CopyMethod (MethodBase method, MethodAttributes set, MethodAttributes clear) ;
+        #endregion
+
+        #region --[Methods: Protected]------------------------------------
         protected MethodBase GetMethodInType (MethodBase method, Type source, int? retainParameters = null)
         {
             if ((source == null || source == method.DeclaringType) && retainParameters == null)
@@ -439,10 +443,6 @@ namespace Cil.CompiledTemplates.Cecil
                     null, parameterTypes, null) ;
         }
 
-        protected abstract void CopyMethod (MethodBase method, MethodAttributes? attribs = null) ;
-        #endregion
-
-        #region --[Methods: Private]--------------------------------------
         protected T VerifyTemplatedMember<T> (T member) where T : MemberInfo
         {
             if (!member.IsDefined (typeof (TemplatedMemberAttribute), false))
