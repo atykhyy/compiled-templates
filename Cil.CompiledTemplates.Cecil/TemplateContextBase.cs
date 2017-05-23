@@ -171,14 +171,24 @@ namespace Cil.CompiledTemplates.Cecil
         }
         #endregion
 
-        #region --[Methods: template application]-------------------------
+        #region --[Methods: Template application - Labels]----------------
         /// <summary>
         /// Copies all template members matching <paramref name="label"/>.
         /// </summary>
         public void CopyLabel (Type label)
         {
+            CopyLabels (label) ;
+        }
+
+        /// <summary>
+        /// Copies all template members matching any of the <paramref name="_labels"/>.
+        /// </summary>
+        public void CopyLabels (params Type[] _labels)
+        {
             var labels = new HashSet<Type> () ;
-            GatherLabels (labels, label) ;
+
+            foreach (var label in _labels)
+                GatherLabels (labels, label) ;
 
             /**/m_dictionary = m_dictionary.Add (s_label, labels) ;
             try
@@ -220,20 +230,17 @@ namespace Cil.CompiledTemplates.Cecil
             {
                 // check the dictionary because the type might have already
                 // been copied via GetType
-                if(!m_dictionary.ContainsKey (type) &&
-                    MatchesLabel (type, labels))
-                    CopyNested   (type) ;
+                if(!m_dictionary.ContainsKey (type))
+                    MatchCopyNested (type, labels) ;
 
                 /**/CopyLabels   (type, labels, templates) ;
             }
 
             foreach (var ctor in template.GetConstructors (all))
-                if (MatchesLabel (ctor, labels) || MatchesLabelInParams (ctor, labels))
-                    CopyMethod   (ctor, 0, 0) ;
+                MatchCopyMethod  (ctor, labels) ;
 
             foreach (var meth in template.GetMethods (all | BindingFlags.Static))
-                if (MatchesLabel (meth, labels) || MatchesLabelInParams (meth, labels))
-                    CopyMethod   (meth, 0, 0) ;
+                MatchCopyMethod  (meth, labels) ;
 
             foreach (var field in template.GetFields (all | BindingFlags.Static))
                 if (MatchesLabel (field, labels))
@@ -255,25 +262,118 @@ namespace Cil.CompiledTemplates.Cecil
 
         private bool MatchesLabel (IEmitLabelAttribute ca, HashSet<Type> labels)
         {
-            if (ca.Labels == null)
+            if (ca.Labels == null || ca.Labels.Length == 0)
                 throw new InvalidOperationException () ;
 
             foreach (var la in ca.Labels)
-                if (labels.Contains (la))
-                    return true ;
+                if (!labels.Contains (la))
+                    return false ;
 
-            return false ;
+            return true ;
         }
 
-        private bool MatchesLabelInParams (MethodBase method, HashSet<Type> labels)
+        private bool MatchCopyMethod (MethodBase method, HashSet<Type> labels)
         {
+            var copy  = false ;
+            var set   = default (MethodAttributes) ;
+            var clear = default (MethodAttributes) ;
+
             foreach (var pa in method.GetParameters ())
                 if (pa.IsDefined (typeof (EmitLabelAttribute)) && labels.Contains (pa.ParameterType))
-                    return true ;
+                {
+                    copy = true ;
+                    break ;
+                }
 
-            return false ;
+            foreach (var ca in method.GetCustomAttributes<EmitLabelAttribute> ())
+                if (MatchesLabel (ca, labels))
+                {
+                    copy = true ;
+
+                    if (ca.Virtual)
+                    {
+                        set   |= MethodAttributes.Virtual | MethodAttributes.NewSlot ;
+                        clear |= MethodAttributes.ReuseSlot ;
+                    }
+                    else
+                    if (ca.Override)
+                    {
+                        set   |= MethodAttributes.Virtual | MethodAttributes.ReuseSlot ;
+                        clear |= MethodAttributes.NewSlot ;
+                    }
+                    else
+                    if (ca.NonVirtual)
+                    {
+                        clear |= MethodAttributes.Virtual | MethodAttributes.Abstract  |
+                                 MethodAttributes.NewSlot | MethodAttributes.ReuseSlot | MethodAttributes.Final ;
+                    }
+
+                    if (ca.Final)
+                    {
+                        set   |= MethodAttributes.Final    ;
+                        clear |= MethodAttributes.Abstract ;
+                    }
+                    else
+                    if (ca.Abstract)
+                    {
+                        set   |= MethodAttributes.Abstract ;
+                        clear |= MethodAttributes.Final    ;
+                    }
+                }
+
+            if ((set & clear) != 0)
+                throw new InvalidOperationException () ; // inconsistent method attributes
+
+            if ((set & MethodAttributes.Virtual) != 0 && method.IsStatic)
+                throw new InvalidOperationException () ; // virtual attributes on static method
+
+            if (copy)
+            {
+                CopyMethod (method, set, clear) ;
+                return true ;
+            }
+            else
+                return false ;
         }
 
+        private bool MatchCopyNested (Type type, HashSet<Type> labels)
+        {
+            var copy  = false ;
+            var set   = default (TypeAttributes) ;
+            var clear = default (TypeAttributes) ;
+
+            foreach (var ca in type.GetCustomAttributes<EmitLabelAttribute> ())
+                if (MatchesLabel (ca, labels))
+                {
+                    copy = true ;
+
+                    if (ca.Sealed)
+                    {
+                        set   |= TypeAttributes.Sealed   ;
+                        clear |= TypeAttributes.Abstract ;
+                    }
+                    else
+                    if (ca.Abstract)
+                    {
+                        set   |= TypeAttributes.Abstract ;
+                        clear |= TypeAttributes.Sealed   ;
+                    }
+                }
+
+            if ((set & clear) != 0)
+                throw new InvalidOperationException () ; // inconsistent type attributes
+
+            if (copy)
+            {
+                CopyNested (type, set, clear) ;
+                return true ;
+            }
+            else
+                return false ;
+        }
+        #endregion
+
+        #region --[Methods: Template application - Manual]----------------
         /// <summary>
         /// Copies the nested template type <paramref name="type"/>.
         /// </summary>
@@ -462,11 +562,8 @@ namespace Cil.CompiledTemplates.Cecil
             {
                 object labels ;
                 if (m_dictionary.TryGetValue (s_label, out labels))
-                    if (MatchesLabel   (type, (HashSet<Type>)labels))
-                    {
-                        CopyNested     (type) ;
-                        return GetType (type) ;
-                    }
+                    if (MatchCopyNested (type, (HashSet<Type>)labels))
+                        return GetType  (type) ;
 
                 // fall through: may be bound with [BindLabel]
             }

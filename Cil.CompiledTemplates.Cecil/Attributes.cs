@@ -39,6 +39,7 @@ namespace Cil.CompiledTemplates.Cecil
         /// <exclude/>
         public string Name { get ; private set ; }
 
+        #region --[Properties: Member attributes]-------------------------
         /// <summary>
         /// If <c>true</c>, the copied field will be made read-only.
         /// </summary>
@@ -53,6 +54,7 @@ namespace Cil.CompiledTemplates.Cecil
         /// If <c>true</c>, the copied member will be made protected.
         /// </summary>
         public bool Protected { get ; set ; }
+        #endregion
     }
 
     interface IEmitLabelAttribute
@@ -61,8 +63,9 @@ namespace Cil.CompiledTemplates.Cecil
     }
 
     /// <summary>
-    /// Indicates that the member is to be copied with the supplied labels.
+    /// Indicates that the member is to be copied when all the supplied labels match.
     /// </summary>
+    [AttributeUsage (AttributeTargets.All, AllowMultiple = true)]
     public sealed class EmitLabelAttribute : Attribute, IEmitLabelAttribute
     {
         /// <summary>
@@ -83,11 +86,49 @@ namespace Cil.CompiledTemplates.Cecil
 
         /// <exclude/>
         public Type[] Labels { get ; private set ; }
+
+        #region --[Properties: Member attributes]-------------------------
+        /// <summary>
+        /// If <c>true</c>, the copied method's Virtual, Final, NewSlot
+        /// and ReuseSlot attributes will be cleared.
+        /// </summary>
+        public bool NonVirtual { get ; set ; }
+
+        /// <summary>
+        /// If <c>true</c>, the copied method's Virtual and NewSlot attributes will be set
+        /// and ReuseSlot will be cleared.
+        /// </summary>
+        public bool Virtual    { get ; set ; }
+
+        /// <summary>
+        /// If <c>true</c>, the copied method's Virtual and ReuseSlot attributes will be set
+        /// and NewSlot will be cleared.
+        /// </summary>
+        public bool Override   { get ; set ; }
+
+        /// <summary>
+        /// If <c>true</c>, the copied method's Final attribute will be set
+        /// and Abstract will be cleared.
+        /// </summary>
+        public bool Final      { get ; set ; }
+
+        /// <summary>
+        /// If <c>true</c>, the copied type's Sealed attribute will be set
+        /// and Abstract will be cleared.
+        /// </summary>
+        public bool Sealed     { get { return Final ; } set { Final = value ; }}
+
+        /// <summary>
+        /// If <c>true</c>, the copied method's Abstract attribute will be set,
+        /// Final will be cleared and the method body will be removed.
+        /// </summary>
+        public bool Abstract   { get ; set ; }
+        #endregion
     }
 
     /// <summary>
     /// Indicates that the templated type is to be bound
-    /// to the supplied type when a matching label is copied.
+    /// to the supplied type when all the supplied labels match.
     /// <para/>
     /// This attribute works as an implicit <see cref="TemplateContext.Bind(Type, Type)"/>.
     /// </summary>
@@ -116,7 +157,7 @@ namespace Cil.CompiledTemplates.Cecil
 
     /// <summary>
     /// Indicates that the explicit implementation of the interface
-    /// is to be copied with the supplied labels.
+    /// is to be copied when all the supplied labels match.
     /// </summary>
     [AttributeUsage (AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = true)]
     public sealed class EmitExplicitInterfaceImplAttribute : Attribute, IEmitLabelAttribute
