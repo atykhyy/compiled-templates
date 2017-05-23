@@ -33,8 +33,13 @@
       <AVI_Rev>$([System.Text.RegularExpressions.Regex]::Match($(AVI_GitTag),$(AVI_Rgx)).Groups.get_Item(1))</AVI_Rev>
       <AVI_Commit>$([System.Text.RegularExpressions.Regex]::Match($(AVI_GitTag),$(AVI_Rgx)).Groups.get_Item(3))</AVI_Commit>
       <AVI_Ver>$(AVI_Ver).$(AVI_Rev)</AVI_Ver>
+    </PropertyGroup>
+    <PropertyGroup Condition=" '$(AVI_Commit)' != '' ">
+      <AVI_Commit>, commit $(AVI_Commit)</AVI_Commit>
+    </PropertyGroup>
+    <PropertyGroup>
       <AVI_New>[assembly:System.Reflection.AssemblyFileVersion(&quot;$(AVI_Ver)&quot;),<!--
-                      -->System.Reflection.AssemblyInformationalVersion(&quot;$(AVI_Ver)$(AVI_Suffix), commit $(AVI_Commit)&quot;)]</AVI_New>
+                      -->System.Reflection.AssemblyInformationalVersion(&quot;$(AVI_Ver)$(AVI_Suffix)$(AVI_Commit)&quot;)]</AVI_New>
     </PropertyGroup>
     <Error Text="Tag $(AVI_GitTag) does not match .nuspec version $(AVI_Ver)" Condition=" '$(AVI_Rev)' == '' " />
     <!-- rewrite version file if version changed -->
