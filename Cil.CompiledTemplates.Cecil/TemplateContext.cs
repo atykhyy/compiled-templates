@@ -180,6 +180,38 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <summary>
+        /// Binds the templated field identified by the lambda expression
+        /// <paramref name="func"/> to the compile-time constant <paramref name="value"/>.
+        /// </summary>
+        public override void BindField<T> (Expression<Func<T>> func, T value)
+        {
+            Instruction insn ;
+            switch (Type.GetTypeCode (typeof (T)))
+            {
+            case TypeCode.Boolean: insn = Instruction.Create (OpCodes.Ldc_I4,        (bool)(object) value ? 1 : 0) ; break ;
+            case TypeCode.Char:    insn = Instruction.Create (OpCodes.Ldc_I4,        (char)(object) value) ; break ;
+            case TypeCode.SByte:   insn = Instruction.Create (OpCodes.Ldc_I4,       (sbyte)(object) value) ; break ;
+            case TypeCode.Byte:    insn = Instruction.Create (OpCodes.Ldc_I4,        (byte)(object) value) ; break ;
+            case TypeCode.Int16:   insn = Instruction.Create (OpCodes.Ldc_I4,       (short)(object) value) ; break ;
+            case TypeCode.UInt16:  insn = Instruction.Create (OpCodes.Ldc_I4,      (ushort)(object) value) ; break ;
+            case TypeCode.Int32:   insn = Instruction.Create (OpCodes.Ldc_I4, (int)        (object) value) ; break ;
+            case TypeCode.UInt32:  insn = Instruction.Create (OpCodes.Ldc_I4, (int)  (uint)(object) value) ; break ;
+            case TypeCode.Int64:   insn = Instruction.Create (OpCodes.Ldc_I8, (long)       (object) value) ; break ;
+            case TypeCode.UInt64:  insn = Instruction.Create (OpCodes.Ldc_I8, (long)(ulong)(object) value) ; break ;
+            case TypeCode.Single:  insn = Instruction.Create (OpCodes.Ldc_R4,       (float)(object) value) ; break ;
+            case TypeCode.Double:  insn = Instruction.Create (OpCodes.Ldc_R8,      (double)(object) value) ; break ;
+            case TypeCode.String:
+                if (value == null) insn = Instruction.Create (OpCodes.Ldnull) ;
+                else               insn = Instruction.Create (OpCodes.Ldstr, value as string) ;
+                break ;
+            default:
+                throw new ArgumentOutOfRangeException () ;
+            }
+
+            Add (GetTemplatedField (func, enforceIsStatic: true), insn) ;
+        }
+
+        /// <summary>
         /// Binds the templated method identified by the lambda expression <paramref name="expr"/>
         /// to <paramref name="method"/>.
         /// </summary>

@@ -109,6 +109,12 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <summary>
+        /// Binds the templated field identified by the lambda expression
+        /// <paramref name="func"/> to the compile-time constant <paramref name="value"/>.
+        /// </summary>
+        public abstract void BindField<T> (Expression<Func<T>> func, T value) ;
+
+        /// <summary>
         /// Gets the current binding for the templated method
         /// identified by the lambda expression <paramref name="expr"/>.
         /// </summary>
