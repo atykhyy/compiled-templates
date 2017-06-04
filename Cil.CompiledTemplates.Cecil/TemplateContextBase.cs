@@ -29,8 +29,7 @@ namespace Cil.CompiledTemplates.Cecil
     public abstract class TemplateContextBase
     {
         #region --[Fields: Private]---------------------------------------
-        protected readonly Type              m_template ;
-        protected readonly SDS.ISymbolReader m_symbols  ;
+        protected readonly Type m_template ;
 
         // dictionary keys are System.Reflection.MemberInfos and special objects
         // values are target-scoped
@@ -62,8 +61,8 @@ namespace Cil.CompiledTemplates.Cecil
         // since I'm working with Assemblies, and the lifetime of Assembly objects
         // is coterminous with the lifetime of the AppDomain they are loaded into,
         // there seems to be no harm in having symbol reader instances live as long
-        private readonly static System.Runtime.CompilerServices.ConditionalWeakTable<Assembly, SDS.ISymbolReader> s_symbolReaders =
-                            new System.Runtime.CompilerServices.ConditionalWeakTable<Assembly, SDS.ISymbolReader> () ;
+        private static ImmutableDictionary<Assembly, SDS.ISymbolReader> s_symbolReaders =
+                       ImmutableDictionary<Assembly, SDS.ISymbolReader>.Empty ;
         #endregion
 
         #region --[Constructors]------------------------------------------
@@ -71,8 +70,6 @@ namespace Cil.CompiledTemplates.Cecil
         {
             m_dictionary = ImmutableDictionary.Create<object, object> () ;
             m_template   = template ;
-            m_symbols    = s_symbolReaders.GetValue (template.Assembly,
-                _ => SymbolHelpers.GetSymbolReader (_.Location)) ;
         }
         #endregion
 
@@ -606,7 +603,8 @@ namespace Cil.CompiledTemplates.Cecil
         {
             try
             {
-                return m_symbols.GetMethod (new SDS.SymbolToken (method.MetadataToken)) ;
+                return ImmutableInterlocked.GetOrAdd (ref s_symbolReaders, method.Module.Assembly,
+                    _ => SymbolHelpers.GetSymbolReader (_.Location)).GetMethod (new SDS.SymbolToken (method.MetadataToken)) ;
             }
             catch
             {
