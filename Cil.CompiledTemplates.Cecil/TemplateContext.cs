@@ -20,6 +20,7 @@ using Mono.Cecil.Cil     ;
 using Mono.Cecil.Rocks   ;
 
 using SR = System.Reflection ;
+using MC = Mono.Cecil.Cil ;
 #endregion
 
 namespace Cil.CompiledTemplates.Cecil
@@ -36,8 +37,8 @@ namespace Cil.CompiledTemplates.Cecil
         private readonly TypeReference      m_tIntPtr  ;
         private readonly TypeReference      m_tString  ;
 
-        private readonly Dictionary<ILProcessor, ILBranchManager> m_splices = new Dictionary<ILProcessor, ILBranchManager> () ;
-        private readonly Dictionary<ILProcessor, Scope>           m_scopes  = new Dictionary<ILProcessor, Scope> () ;
+        private readonly Dictionary<MC.MethodBody, ILBranchManager> m_splices = new Dictionary<MC.MethodBody, ILBranchManager> () ;
+        private readonly Dictionary<MC.MethodBody, Scope>           m_scopes  = new Dictionary<MC.MethodBody, Scope> () ;
 
         private readonly static MethodReference NullMethod = new MethodReference (null, new TypeReference (null, null, null, null)) ;
 
@@ -246,11 +247,11 @@ namespace Cil.CompiledTemplates.Cecil
         /// </summary>
         public void Commit ()
         {
-            foreach (var il in m_splices.Keys)
-                il.Body.OptimizeMacros () ;
+            foreach (var body in m_splices.Keys)
+                body.OptimizeMacros () ;
 
             foreach (var kv in m_scopes)
-                kv.Key.Body.Method.DebugInformation.Scope = kv.Value.ToCecil () ;
+                kv.Key.Method.DebugInformation.Scope = kv.Value.ToCecil () ;
         }
 
         /// <inherit/>
@@ -587,10 +588,10 @@ namespace Cil.CompiledTemplates.Cecil
             }
 
             ILBranchManager branchManager ;
-            if (!m_splices.TryGetValue (il, out branchManager))
+            if (!m_splices.TryGetValue (il.Body, out branchManager))
             {
                 branchManager = new ILBranchManager (il) ;
-                m_splices.Add (il, branchManager) ;
+                m_splices.Add (il.Body, branchManager) ;
             }
 
             // decode splice location
@@ -638,7 +639,7 @@ namespace Cil.CompiledTemplates.Cecil
 
             // NB: an intermediate scope structure is necessary
             // because ScopeDebugInformation does not expose Instruction references
-            var rootScope = PrepareVariableScopes (il) ;
+            var rootScope = PrepareVariableScopes (il.Body) ;
 
             // prepare to splice at indicated location
             // prepare instruction to branch to instead of normal splice returns
@@ -1309,13 +1310,13 @@ namespace Cil.CompiledTemplates.Cecil
             return scope ;
         }
 
-        private Scope PrepareVariableScopes (ILProcessor il)
+        private Scope PrepareVariableScopes (MC.MethodBody body)
         {
             Scope scope ;
-            if (!m_scopes.TryGetValue (il, out scope))
+            if (!m_scopes.TryGetValue (body, out scope))
             {
-                scope = Scope.FromMethodBody (il.Body) ;
-                m_scopes.Add (il, scope) ;
+                scope = Scope.FromMethodBody (body) ;
+                m_scopes.Add (body, scope) ;
             }
 
             return scope ;
