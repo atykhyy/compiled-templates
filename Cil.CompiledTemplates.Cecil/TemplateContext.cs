@@ -101,12 +101,11 @@ namespace Cil.CompiledTemplates.Cecil
         /// <summary>
         /// Binds the templated type <paramref name="template"/> to <paramref name="type"/>.
         /// </summary>
-        /// <remarks>
-        /// The type referred to by <paramref name="type"/> can be defined anywhere,
-        /// but the reference must belong to the target module.
-        /// </remarks>
         public void Bind (Type template, TypeReference type)
         {
+            if (type != null && type.Module != m_target.Module)
+                type  = m_target.Module.ImportReference (type) ;
+
             Add (GetTemplatedType (template), type) ;
         }
 
@@ -117,12 +116,12 @@ namespace Cil.CompiledTemplates.Cecil
         /// <remarks>
         /// <paramref name="field"/> must be an instance field if the templated field
         /// is an instance field, and a static field if the templated field is static.
-        /// <para/>
-        /// The field referred to by <paramref name="field"/> can be defined anywhere,
-        /// but the reference must belong to the target module.
         /// </remarks>
         public void BindField<T> (Expression<Func<T>> func, FieldReference field)
         {
+            if (field.Module != m_target.Module)
+                field         = m_target.Module.ImportReference (field) ;
+
             var templatedField = GetTemplatedField (func, enforceIsStatic: field.Resolve ().IsStatic) ;
             var declaringType  = templatedField.DeclaringType ;
 
@@ -170,6 +169,9 @@ namespace Cil.CompiledTemplates.Cecil
         /// </remarks>
         public void BindField<T> (Expression<Func<T>> func, MethodReference method)
         {
+            if (method.Module != m_target.Module)
+                method         = m_target.Module.ImportReference (method) ;
+
             if (method != null && method.HasThis)
                 throw new ArgumentOutOfRangeException (nameof (method)) ;
 
@@ -223,6 +225,9 @@ namespace Cil.CompiledTemplates.Cecil
         /// </remarks>
         public void Bind_ (Expression<Action> expr, MethodReference method)
         {
+            if (method.Module != m_target.Module)
+                method         = m_target.Module.ImportReference (method) ;
+
             Add (GetTemplatedMethod (expr), method) ;
         }
 
@@ -237,6 +242,9 @@ namespace Cil.CompiledTemplates.Cecil
         /// </remarks>
         public void Bind<T> (Func<T> func, MethodReference method)
         {
+            if (method.Module != m_target.Module)
+                method         = m_target.Module.ImportReference (method) ;
+
             Add (GetTemplatedMethod (func.Method, null), method) ;
         }
         #endregion
@@ -1044,12 +1052,22 @@ namespace Cil.CompiledTemplates.Cecil
 
                     FieldReference      field ;
                     MethodReference     meth  ;
+                    TypeReference       tref  ;
                     ParameterDefinition pd ;
                     VariableDefinition  vd ;
                     MethodDefinition    md ;
                     Instruction         li ;
+                    if ((tref = newop as TypeReference) != null)
+                    {
+                        if (tref.Module  != m_target.Module)
+                            newop         = m_target.Module.ImportReference (tref) ;
+                    }
+                    else
                     if ((field = newop as FieldReference) != null)
                     {
+                        if (field.Module != m_target.Module)
+                            newop         = m_target.Module.ImportReference (field) ;
+
                         switch (newinsn.OpCode.Code)
                         {
                         case Code.Ldarga:  newinsn.OpCode = OpCodes.Ldsflda ; break ;
@@ -1108,6 +1126,9 @@ namespace Cil.CompiledTemplates.Cecil
                     else
                     if ((meth = newop as MethodReference) != null && !(newinsn.Operand is MethodBase))
                     {
+                        if (meth.Module  != m_target.Module)
+                            meth          = m_target.Module.ImportReference (meth) ;
+
                         // convert bindings of storage locations to methods as delegate creation
                         Type type ;
                         switch (newinsn.OpCode.Code)
@@ -1128,6 +1149,12 @@ namespace Cil.CompiledTemplates.Cecil
                         }
 
                         continue ;
+                    }
+                    else
+                    if ((meth = newop as MethodReference) != null)
+                    {
+                        if (meth.Module  != m_target.Module)
+                            newop         = m_target.Module.ImportReference (meth) ;
                     }
 
                     newinsn.Operand = newop ;
@@ -1366,8 +1393,8 @@ namespace Cil.CompiledTemplates.Cecil
             {
                 // allow limited "forward declarations"
                 var emitName = GetEmitName (type) ;
-                var emitType = ((TypeDefinition) value).NestedTypes.Single (_ => _.Name == emitName) ;
-                return emitType ;
+                var emitType = ((TypeReference) value).Resolve ().NestedTypes.Single (_ => _.Name == emitName) ;
+                return emitType.Module != m_target.Module ? m_target.Module.ImportReference (emitType) : emitType ;
             }
 
             if (type.IsGenericType && !type.IsGenericTypeDefinition)
