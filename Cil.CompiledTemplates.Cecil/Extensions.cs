@@ -258,6 +258,14 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <summary>
+        /// Indicates whether <paramref name="method"/> returns <c>void</c>.
+        /// </summary>
+        public static bool IsVoidReturn (this MethodReference method)
+        {
+            return method.ReturnType.SameAs (method.Module.TypeSystem.Void) ;
+        }
+
+        /// <summary>
         /// Returns the full assembly name corresponding to <paramref name="scope"/>.
         /// </summary>
         public static string GetFullName (this IMetadataScope scope)
@@ -447,7 +455,7 @@ namespace Cil.CompiledTemplates.Cecil
                 var method = (MethodReference) i1.Operand ;
                 if (method.HasThis         &&
                     method.Name == ".ctor" &&
-                    method.ReturnType.SameAs (typeof (void)))
+                    method.IsVoidReturn ())
                 {
                     for (var t = il.Body.Method.DeclaringType.BaseType ; t != null ; t = t.Resolve ().BaseType)
                     {
@@ -586,6 +594,11 @@ namespace Cil.CompiledTemplates.Cecil
         /// </summary>
         public static readonly TypeReferenceEqualityComparer Instance = new TypeReferenceEqualityComparer () ;
 
+        #region --[Fields: Private]---------------------------------------
+        private static readonly byte[] CoreLibraryToken = typeof (void).Assembly.GetName ().GetPublicKeyToken () ;
+        private static readonly byte[] NullToken        = new byte[0] ;
+        #endregion
+
         #region --[Interface: IEqualityComparer<>]------------------------
         /// <summary>
         /// Indicates whether the type reference <paramref name="a"/>
@@ -633,7 +646,35 @@ namespace Cil.CompiledTemplates.Cecil
             if (b.IsNested)
                 return a.DeclaringType.SameAs (b.DeclaringType) ;
 
-            return a.FullName == b.FullName && a.Scope.GetFullName () == b.Assembly.FullName ;
+            if (a.FullName != b.FullName)
+                return false ;
+
+            if (a.Scope.GetFullName () == b.Assembly.FullName)
+                return true ;
+
+            // workaround to permit limited cross-targeting
+            // assume identity of types belonging to one of the core framework libraries
+            // (in different frameworks, standard types may be provided by different assemblies)
+            if (typeof (void).Assembly       == b.Assembly ||
+                CoreLibraryToken.SequenceEqual (b.Assembly.GetName ().GetPublicKeyToken () ?? NullToken))
+            {
+                // fast check: mscorlib, netstandard, netcore
+                var corlib = a.Module.TypeSystem.CoreLibrary ;
+                if (corlib.SameAs (a.Scope))
+                    return true ;
+
+                var corlibReference  = corlib as AssemblyNameReference ;
+                if (corlibReference == null)
+                    throw new NotImplementedException ("TypeSystem.CoreLibrary is a " + corlib.MetadataScopeType + " (" + corlib + ")") ;
+
+                // if a's scope is a module definition or module reference,
+                // it is highly unlikely to be a core library
+                var scopeReference   = a.Scope as AssemblyNameReference ;
+                if (scopeReference  != null)
+                   return corlibReference.PublicKeyToken.SequenceEqual (scopeReference.PublicKeyToken ?? NullToken) ;
+            }
+
+            return false ;
         }
 
         /// <summary>
