@@ -246,7 +246,7 @@ namespace Cil.CompiledTemplates.Cecil
         /// </remarks>
         public static bool SameAs (this TypeReference a, Type b)
         {
-            return TypeReferenceEqualityComparer.Instance.Equals (a, b) ;
+            return a == null ? b == null : a.Module.ImportReference (b).SameAs (a) ;
         }
 
         /// <summary>
@@ -600,83 +600,6 @@ namespace Cil.CompiledTemplates.Cecil
         #endregion
 
         #region --[Interface: IEqualityComparer<>]------------------------
-        /// <summary>
-        /// Indicates whether the type reference <paramref name="a"/>
-        /// refers to the CLR type <paramref name="b"/>.
-        /// </summary>
-        public bool Equals (TypeReference a, Type b)
-        {
-            if (a == null)
-                return b == null ;
-
-            if (b == null)
-                return false ;
-
-            if (b.IsGenericTypeDefinition != a.HasGenericParameters)
-                return false ;
-
-            if (b.Name != a.Name)
-                return false ;
-
-            var b_IsGenericInstance  = b.IsGenericType && !b.IsGenericTypeDefinition ;
-            if (b_IsGenericInstance != a.IsGenericInstance)
-                return false ;
-
-            if (b_IsGenericInstance)
-            {
-                var ag = (GenericInstanceType) a ;
-                var bg = b.GenericTypeArguments  ;
-
-                if (ag.GenericArguments.Count != bg.Length)
-                    return false ;
-
-                if (!Equals (ag.ElementType, b.GetGenericTypeDefinition ()))
-                    return false ;
-
-                for (int i = 0 ; i < ag.GenericArguments.Count ; ++i)
-                    if (!Equals (ag.GenericArguments[i], bg[i]))
-                        return false ;
-
-                return true ;
-            }
-
-            if (b.IsNested != a.IsNested)
-                return false ;
-
-            if (b.IsNested)
-                return a.DeclaringType.SameAs (b.DeclaringType) ;
-
-            if (a.FullName != b.FullName)
-                return false ;
-
-            if (a.Scope.GetFullName () == b.Assembly.FullName)
-                return true ;
-
-            // workaround to permit limited cross-targeting
-            // assume identity of types belonging to one of the core framework libraries
-            // (in different frameworks, standard types may be provided by different assemblies)
-            if (typeof (void).Assembly       == b.Assembly ||
-                CoreLibraryToken.SequenceEqual (b.Assembly.GetName ().GetPublicKeyToken () ?? NullToken))
-            {
-                // fast check: mscorlib, netstandard, netcore
-                var corlib = a.Module.TypeSystem.CoreLibrary ;
-                if (corlib.SameAs (a.Scope))
-                    return true ;
-
-                var corlibReference  = corlib as AssemblyNameReference ;
-                if (corlibReference == null)
-                    throw new NotImplementedException ("TypeSystem.CoreLibrary is a " + corlib.MetadataScopeType + " (" + corlib + ")") ;
-
-                // if a's scope is a module definition or module reference,
-                // it is highly unlikely to be a core library
-                var scopeReference   = a.Scope as AssemblyNameReference ;
-                if (scopeReference  != null)
-                   return corlibReference.PublicKeyToken.SequenceEqual (scopeReference.PublicKeyToken ?? NullToken) ;
-            }
-
-            return false ;
-        }
-
         /// <summary>
         /// Indicates whether the two type references refer to the same type.
         /// </summary>
