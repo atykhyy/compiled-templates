@@ -692,17 +692,100 @@ namespace Cil.CompiledTemplates.Cecil
                 var simple = true ;
                 for (int i = 0 ; i < pars.Length ; ++i)
                 {
-                    // remove simple loads, skip nops
+                    var stack = 1 ;
+                    var spill = false ;
+
+                    // remove simple loads, skip nops, spill calculated values
                     if (simple)
                     {
                     repeat:
-                        var isTarget  = insnRight != null && branchManager.IsTarget (insnRight) ;
-                        if(!isTarget)
+                        if (insnRight != null && branchManager.IsTarget (insnRight))
                         {
-                            // move one instruction left
-                            insnRight = insnLeft ;
-                            insnLeft  = insnLeft.Previous ;
+                            // the right thing to do here is analyze basic blocks
+                            // and coalesce values along different control paths,
+                            // but that's not always reliable in the general case
+                            // and a huge overkill - just spill everything
+                            simple = false ;
+                            goto spill ;
+                        }
 
+                        // move one instruction left
+                        insnRight = insnLeft ;
+                        insnLeft  = insnLeft.Previous ;
+
+                        // compute IL stack balance going backwards
+                        #region switch (insnRight.OpCode.StackBehaviourPush)
+                        switch (insnRight.OpCode.StackBehaviourPush)
+                        {
+                        case StackBehaviour.Push0:
+                            break ;
+                        case StackBehaviour.Push1:
+                        case StackBehaviour.Pushi:
+                        case StackBehaviour.Pushi8:
+                        case StackBehaviour.Pushr4:
+                        case StackBehaviour.Pushr8:
+                        case StackBehaviour.Pushref:
+                            stack -= 1 ;
+                            break ;
+                        case StackBehaviour.Push1_push1:
+                            stack -= 2 ;
+                            break ;
+                        case StackBehaviour.Varpush:
+                            var method = (MethodReference) insnRight.Operand ;
+                            if(!method.IsVoidReturn ())
+                                stack-- ;
+
+                            break ;
+                        default:
+                            throw new InvalidOperationException () ; // not reached
+                        }
+                        #endregion
+                        #region switch (insnRight.OpCode.StackBehaviourPop)
+                        switch (insnRight.OpCode.StackBehaviourPop)
+                        {
+                        case StackBehaviour.Pop0:
+                            break ;
+                        case StackBehaviour.Popi:
+                        case StackBehaviour.Pop1:
+                        case StackBehaviour.Popref:
+                            stack += 1 ;
+                            break ;
+                        case StackBehaviour.Popi_pop1:
+                        case StackBehaviour.Popi_popi:
+                        case StackBehaviour.Pop1_pop1:
+                        case StackBehaviour.Popi_popi8:
+                        case StackBehaviour.Popi_popr4:
+                        case StackBehaviour.Popi_popr8:
+                        case StackBehaviour.Popref_pop1:
+                        case StackBehaviour.Popref_popi:
+                            stack += 2 ;
+                            break ;
+                        case StackBehaviour.Popi_popi_popi:
+                        case StackBehaviour.Popref_popi_popi:
+                        case StackBehaviour.Popref_popi_popi8:
+                        case StackBehaviour.Popref_popi_popr4:
+                        case StackBehaviour.Popref_popi_popr8:
+                        case StackBehaviour.Popref_popi_popref:
+                            stack += 3 ;
+                            break ;
+                        case StackBehaviour.Varpop:
+                            var method = (MethodReference) insnRight.Operand ;
+                            if (method.HasThis && insnRight.OpCode.Code != Code.Newobj)
+                                stack++ ;
+
+                            stack += method.Parameters.Count ;
+                            break ;
+                        case StackBehaviour.PopAll:
+                            // only `leave` has this behavior
+                            simple = false ;
+                            goto spill ;
+                        default:
+                            throw new InvalidOperationException () ; // not reached
+                        }
+                        #endregion
+
+                        if (!spill)
+                        {
                             if (insnRight.IsSimpleLoad ())
                             {
                                 dictionary.Add (pars[i], insnRight.Clone ()) ;
@@ -715,11 +798,21 @@ namespace Cil.CompiledTemplates.Cecil
 
                             if (insnRight.OpCode == OpCodes.Nop)
                                 goto repeat ;
+
+                            // prepare to spill one value into a new local
+                            spill = true ;
                         }
 
-                        simple = false ;
+                        // skip instructions until we have zero extra on stack
+                        if (stack  > 0)
+                            goto repeat ;
+
+                        // this can happen if `dup` is used to produce two values - don't bother for now
+                        if (stack  < 0)
+                            simple = false ;
                     }
 
+                spill:
                     // spill remaining values into new locals
                     var param = pars[i] as ParameterInfo ;
                     var local = il.CreateLocal (GetType (param != null ? param.ParameterType :
