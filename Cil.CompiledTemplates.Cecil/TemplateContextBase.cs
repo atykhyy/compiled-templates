@@ -251,7 +251,7 @@ namespace Cil.CompiledTemplates.Cecil
 
             foreach (var ca in template.GetCustomAttributes<EmitExplicitInterfaceImplAttribute> ())
                 if (MatchesLabel (ca, labels))
-                    CopyExplicitInterfaceImpl (ca.Interface) ;
+                    CopyExplicitInterfaceImpl (template, ca.Interface) ;
         }
 
         private bool MatchesLabel (MemberInfo member, HashSet<Type> labels)
@@ -384,9 +384,9 @@ namespace Cil.CompiledTemplates.Cecil
 
         /// <summary>
         /// Copies all members comprising the explicit implementation
-        /// of the specified interface <paramref name="type"/>.
+        /// of the specified interface in <paramref name="template"/>.
         /// </summary>
-        public abstract void CopyExplicitInterfaceImpl (Type type) ;
+        public abstract void CopyExplicitInterfaceImpl (Type template, Type iface) ;
 
         /// <summary>
         /// Copies the template field

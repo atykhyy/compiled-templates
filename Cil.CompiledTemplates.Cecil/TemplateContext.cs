@@ -263,10 +263,11 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <inherit/>
-        public override void CopyExplicitInterfaceImpl (Type type)
+        public override void CopyExplicitInterfaceImpl (Type template, Type type)
         {
             var fixups = new Dictionary<MethodBase, Action<MethodDefinition>> () ;
             var prefix = type.GetPseudoSourceFullName () ;
+            var target = (TypeDefinition) m_dictionary[template] ;
 
             foreach (var property in type.GetProperties ())
             {
@@ -281,7 +282,7 @@ namespace Cil.CompiledTemplates.Cecil
                             (Mono.Cecil.ParameterAttributes) indexerParam.Attributes, GetType (indexerParam.ParameterType))) ;
                 }
 
-                m_target.Properties.Add (prop) ;
+                target.Properties.Add (prop) ;
 
                 if (property.GetMethod != null) fixups.Add (property.GetMethod, _ => prop.GetMethod = _) ;
                 if (property.SetMethod != null) fixups.Add (property.GetMethod, _ => prop.SetMethod = _) ;
@@ -292,13 +293,13 @@ namespace Cil.CompiledTemplates.Cecil
                 var evt = new EventDefinition (prefix + "." + event_.Name,
                     Mono.Cecil.EventAttributes.SpecialName, GetType (event_.EventHandlerType)) ;
 
-                m_target.Events.Add (evt) ;
+                target.Events.Add (evt) ;
 
                 if (event_.AddMethod    != null) fixups.Add (event_.AddMethod,    _ => evt.AddMethod    = _) ;
                 if (event_.RemoveMethod != null) fixups.Add (event_.RemoveMethod, _ => evt.RemoveMethod = _) ;
             }
 
-            var mapping = m_template.GetInterfaceMap (type) ;
+            var mapping = template.GetInterfaceMap (type) ;
 
             for (int i  = 0 ; i < mapping.TargetMethods.Length ; ++i)
             {
@@ -308,16 +309,14 @@ namespace Cil.CompiledTemplates.Cecil
                 if(!copy.IsPrivate)
                     throw new InvalidOperationException () ;
 
-                // TODO: template-dependent generic interfaces etc.
-                copy.Overrides.Add (m_target.Module.ImportReference (mapping.InterfaceMethods[i])) ;
+                copy.Overrides.Add (GetMethod (mapping.InterfaceMethods[i])) ;
 
                 Action<MethodDefinition> fixup ;
                 if (fixups.TryGetValue (mapping.InterfaceMethods[i], out fixup))
                     fixup (copy) ;
             }
 
-            m_target.Interfaces.Add (new InterfaceImplementation (
-                m_target.Module.ImportReference (type))) ;
+            target.Interfaces.Add (new InterfaceImplementation (GetType (type))) ;
         }
 
         /// <inherit/>
@@ -344,7 +343,8 @@ namespace Cil.CompiledTemplates.Cecil
             }
 
             // set the base type if it's templated
-            if (type.BaseType.IsDefined (typeof (TemplatedMemberAttribute), false))
+            if (type.BaseType.Assembly == typeof (object).Assembly ||
+                type.BaseType.IsDefined  (typeof (TemplatedMemberAttribute), false))
             {
                 newtype.BaseType = GetType (type.BaseType) ;
             }
@@ -361,10 +361,8 @@ namespace Cil.CompiledTemplates.Cecil
             var template = field ;
             var newfield = new FieldDefinition (template.Name, (Mono.Cecil.FieldAttributes) template.Attributes, GetType (template.FieldType)) ;
 
-            // TODO: copy fields to nested types
-            // TODO: copy methods from "base" classes
             CopyCAs   (template, newfield) ;
-            m_target.Fields.Add (newfield) ;
+            GetTarget (template).Fields.Add (newfield) ;
 
             var emitAttr  = field.GetCustomAttribute<EmitNameAttribute> () ;
             if (emitAttr != null)
@@ -1297,43 +1295,7 @@ namespace Cil.CompiledTemplates.Cecil
                             }
                         }
 
-                        // TODO: what if a method is both?
-                        // to deal with all the potential complexities, I'll have
-                        // to re-implement the import code in Mono.Cecil/Import.cs
-                        // inserting template bindings and GetEmitName's where appropriate
-                        if (meth.IsGenericMethod)
-                        {
-                            var newmeth = new GenericInstanceMethod (m_target.Module.ImportReference (
-                                ((MethodInfo)meth).GetGenericMethodDefinition ())) ;
-
-                            foreach (var typeArgument in meth.GetGenericArguments ())
-                                newmeth.GenericArguments.Add (GetType (typeArgument)) ;
-
-                            newinsn.Operand = newmeth ;
-                        }
-                        else
-                        if (meth.DeclaringType.IsGenericType && !meth.DeclaringType.IsGenericTypeDefinition)
-                        {
-                            var genmeth = m_target.Module.ImportReference (meth.Module.ResolveMethod (meth.MetadataToken)) ;
-
-                            newinsn.Operand = genmeth.CloseDeclaringType (Array.ConvertAll (meth.DeclaringType.GetGenericArguments (), GetType)) ;
-                        }
-                        else
-                        {
-                            // allow limited "forward declarations"
-                            var newmeth = new MethodReference (GetEmitName (meth),
-                                GetType (meth.GetReturnType ()),
-                                GetType (meth.DeclaringType)) ;
-
-                            newmeth.HasThis      = (meth.CallingConvention & CallingConventions.HasThis)      != 0 ;
-                            newmeth.ExplicitThis = (meth.CallingConvention & CallingConventions.ExplicitThis) != 0 ;
-
-                            foreach (var param in meth.GetParameters ())
-                                newmeth.Parameters.Add (new ParameterDefinition (param.Name, (Mono.Cecil.ParameterAttributes) param.Attributes,
-                                    GetType (param.ParameterType))) ;
-
-                            newinsn.Operand = newmeth ;
-                        }
+                        newinsn.Operand = GetMethod (meth) ;
                     }
                     else
                     if ((field = newinsn.Operand as FieldInfo) != null)
@@ -1471,6 +1433,47 @@ namespace Cil.CompiledTemplates.Cecil
             }
             else
                 return (TypeDefinition) m_dictionary[member.DeclaringType] ;
+        }
+
+        private MethodReference GetMethod (MethodBase meth)
+        {
+            // TODO: what if a method is both?
+            // to deal with all the potential complexities, I'll have
+            // to re-implement the import code in Mono.Cecil/Import.cs
+            // inserting template bindings and GetEmitName's where appropriate
+            if (meth.IsGenericMethod)
+            {
+                var newmeth = new GenericInstanceMethod (m_target.Module.ImportReference (
+                    ((MethodInfo)meth).GetGenericMethodDefinition ())) ;
+
+                foreach (var typeArgument in meth.GetGenericArguments ())
+                    newmeth.GenericArguments.Add (GetType (typeArgument)) ;
+
+                return newmeth ;
+            }
+            else
+            if (meth.DeclaringType.IsGenericType && !meth.DeclaringType.IsGenericTypeDefinition)
+            {
+                var genmeth = m_target.Module.ImportReference (meth.Module.ResolveMethod (meth.MetadataToken)) ;
+
+                return genmeth.CloseDeclaringType (Array.ConvertAll (meth.DeclaringType.GetGenericArguments (), GetType)) ;
+            }
+            else
+            {
+                // allow limited "forward declarations"
+                var newmeth = new MethodReference (GetEmitName (meth),
+                    GetType (meth.GetReturnType ()),
+                    GetType (meth.DeclaringType)) ;
+
+                newmeth.HasThis      = (meth.CallingConvention & CallingConventions.HasThis)      != 0 ;
+                newmeth.ExplicitThis = (meth.CallingConvention & CallingConventions.ExplicitThis) != 0 ;
+
+                foreach (var param in meth.GetParameters ())
+                    newmeth.Parameters.Add (new ParameterDefinition (param.Name, (Mono.Cecil.ParameterAttributes) param.Attributes,
+                        GetType (param.ParameterType))) ;
+
+                return newmeth ;
+            }
         }
 
         private new TypeReference GetType (Type type)
