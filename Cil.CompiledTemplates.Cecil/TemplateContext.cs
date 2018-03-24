@@ -952,6 +952,9 @@ namespace Cil.CompiledTemplates.Cecil
                 localz[i]            = newloc  ;
             }
 
+            // support splicing generic methods
+            var gmta = method.IsGenericMethod ? method.GetGenericArguments () : null ;
+
             // add guard value for end-of-method offset
             insns.Add (bytes.Length, ret) ;
 
@@ -1057,7 +1060,7 @@ namespace Cil.CompiledTemplates.Cecil
                     offset += 8 ;
                     continue ;
                 case OperandType.InlineMethod:
-                    newinsn.Operand = method.Module.ResolveMethod (BitConverter.ToInt32 (bytes, offset)) ;
+                    newinsn.Operand = method.Module.ResolveMethod (BitConverter.ToInt32 (bytes, offset), null, gmta) ;
                     offset += 4 ;
                     break ;
                 case OperandType.InlineNone:
@@ -1087,11 +1090,11 @@ namespace Cil.CompiledTemplates.Cecil
                     newinsn.Operand = array ;
                     continue ;
                 case OperandType.InlineTok:
-                    newinsn.Operand = method.Module.ResolveMember (BitConverter.ToInt32 (bytes, offset)) ;
+                    newinsn.Operand = method.Module.ResolveMember (BitConverter.ToInt32 (bytes, offset), null, gmta) ;
                     offset += 4 ;
                     break ;
                 case OperandType.InlineType:
-                    newinsn.Operand = method.Module.ResolveType (BitConverter.ToInt32 (bytes, offset)) ;
+                    newinsn.Operand = method.Module.ResolveType (BitConverter.ToInt32 (bytes, offset), null, gmta) ;
                     offset += 4 ;
                     break ;
                 case OperandType.InlineVar:
