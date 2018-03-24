@@ -132,7 +132,7 @@ namespace Cil.CompiledTemplates.Cecil
     /// <para/>
     /// This attribute works as an implicit <see cref="TemplateContext.Bind(Type, Type)"/>.
     /// </summary>
-    [AttributeUsage (AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = true)]
+    [AttributeUsage (AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.GenericParameter, AllowMultiple = true)]
     public sealed class BindLabelAttribute : Attribute, IEmitLabelAttribute
     {
         /// <exclude/>

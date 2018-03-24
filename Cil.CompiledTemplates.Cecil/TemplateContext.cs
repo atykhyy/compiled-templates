@@ -327,14 +327,11 @@ namespace Cil.CompiledTemplates.Cecil
                 throw new ArgumentOutOfRangeException (nameof (type)) ;
 
             var template = type ;
-            var newtype  = new TypeDefinition (null, template.Name, (Mono.Cecil.TypeAttributes)((template.Attributes & ~clear) | set)) ;
+            var newtype  = new TypeDefinition (null, GetEmitName (type), (Mono.Cecil.TypeAttributes)((template.Attributes & ~clear) | set)) ;
 
             var emitAttr  = type.GetCustomAttribute<EmitNameAttribute> () ;
             if (emitAttr != null)
             {
-                if (emitAttr.Name != null)
-                    newtype.Name   = emitAttr.Name ;
-
                 if (emitAttr.Private)
                     newtype.Attributes = (newtype.Attributes & ~Mono.Cecil.TypeAttributes.VisibilityMask) | Mono.Cecil.TypeAttributes.NestedPrivate ;
 
@@ -353,6 +350,12 @@ namespace Cil.CompiledTemplates.Cecil
             m_target.NestedTypes.Add (newtype) ;
 
             m_dictionary = m_dictionary.Add (template, newtype) ;
+
+            // if the type is generic, validate that all generic parameters
+            // are bound and that the emitted type is not actually generic
+            if (type.IsGenericTypeDefinition)
+                foreach (var parameter in type.GetGenericArguments ())
+                    GetType (parameter) ;
         }
 
         /// <inherit/>
@@ -951,6 +954,7 @@ namespace Cil.CompiledTemplates.Cecil
 
             // support splicing generic methods
             var gmta = method.IsGenericMethod ? method.GetGenericArguments () : null ;
+            var gtta = method.DeclaringType.IsGenericType ? method.DeclaringType.GetGenericArguments () : null ;
 
             // add guard value for end-of-method offset
             insns.Add (bytes.Length, ret) ;
@@ -1045,7 +1049,7 @@ namespace Cil.CompiledTemplates.Cecil
                     offset += 4 ;
                     continue ;
                 case OperandType.InlineField:
-                    newinsn.Operand = method.Module.ResolveField (BitConverter.ToInt32 (bytes, offset)) ;
+                    newinsn.Operand = method.Module.ResolveField (BitConverter.ToInt32 (bytes, offset), gtta, gmta) ;
                     offset += 4 ;
                     break ;
                 case OperandType.InlineI:
@@ -1057,7 +1061,7 @@ namespace Cil.CompiledTemplates.Cecil
                     offset += 8 ;
                     continue ;
                 case OperandType.InlineMethod:
-                    newinsn.Operand = method.Module.ResolveMethod (BitConverter.ToInt32 (bytes, offset), null, gmta) ;
+                    newinsn.Operand = method.Module.ResolveMethod (BitConverter.ToInt32 (bytes, offset), gtta, gmta) ;
                     offset += 4 ;
                     break ;
                 case OperandType.InlineNone:
@@ -1087,11 +1091,11 @@ namespace Cil.CompiledTemplates.Cecil
                     newinsn.Operand = array ;
                     continue ;
                 case OperandType.InlineTok:
-                    newinsn.Operand = method.Module.ResolveMember (BitConverter.ToInt32 (bytes, offset), null, gmta) ;
+                    newinsn.Operand = method.Module.ResolveMember (BitConverter.ToInt32 (bytes, offset), gtta, gmta) ;
                     offset += 4 ;
                     break ;
                 case OperandType.InlineType:
-                    newinsn.Operand = method.Module.ResolveType (BitConverter.ToInt32 (bytes, offset), null, gmta) ;
+                    newinsn.Operand = method.Module.ResolveType (BitConverter.ToInt32 (bytes, offset), gtta, gmta) ;
                     offset += 4 ;
                     break ;
                 case OperandType.InlineVar:
@@ -1499,6 +1503,9 @@ namespace Cil.CompiledTemplates.Cecil
         /// <inherit/>
         protected override object GetTypeInternal (Type type)
         {
+            if (type.IsGenericParameter)
+                throw new InvalidOperationException () ; // unbound generic parameter
+
             object value ;
             if (type.DeclaringType != null && m_dictionary.TryGetValue (type.DeclaringType, out value))
             {
