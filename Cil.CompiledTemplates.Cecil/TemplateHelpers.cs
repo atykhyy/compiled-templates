@@ -38,6 +38,23 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <summary>
+        /// A call to this method is converted to a null reference comparison
+        /// in emitted code, regardless of the template type of <c>T</c>,
+        /// if the bound type of <c>T</c> is a reference type.
+        /// If the bound type of <c>T</c> is a value type,
+        /// the call is converted to instructions returning <c>false</c>.
+        /// </summary>
+        /// <remarks>
+        /// This method helps to avoid needless duplication of templated types
+        /// when it is not known beforehand whether the bound type
+        /// is a value or a reference type.
+        /// </remarks>
+        public static bool IsNullReference<T> (this T value)
+        {
+            throw new InvalidProgramException () ;
+        }
+
+        /// <summary>
         /// A call to this method is converted to a null constant
         /// in emitted code, regardless of the template type of <c>T</c>,
         /// if the bound type of <c>T</c> is a reference type.

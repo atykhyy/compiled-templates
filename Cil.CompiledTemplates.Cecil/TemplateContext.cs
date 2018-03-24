@@ -1265,26 +1265,41 @@ namespace Cil.CompiledTemplates.Cecil
                         // process template helper methods
                         if (meth.DeclaringType == typeof (TemplateHelpers))
                         {
-                            if (meth.Name == nameof (TemplateHelpers.IsNull))
+                            if (GetType (meth.GetGenericArguments ()[0]).IsValueType)
                             {
-                                if (GetType (meth.GetGenericArguments ()[0]).IsValueType)
+                                if (meth.Name == nameof (TemplateHelpers.IsNull) ||
+                                    meth.Name == nameof (TemplateHelpers.Null))
+                                {
                                     throw new InvalidOperationException () ;
+                                }
 
-                                newinsn.OpCode  = OpCodes.Ldnull ;
-                                newinsn.Operand = null ;
+                                if (meth.Name == nameof (TemplateHelpers.IsNullReference))
+                                {
+                                    newinsn.OpCode  = OpCodes.Pop ;
+                                    newinsn.Operand = null ;
 
-                                il.Emit (OpCodes.Ceq) ;
-                                continue ;
+                                    il.Emit (OpCodes.Ldc_I4_0) ;
+                                    continue ;
+                                }
                             }
-
-                            if (meth.Name == nameof (TemplateHelpers.Null))
+                            else
                             {
-                                if (GetType (meth.GetGenericArguments ()[0]).IsValueType)
-                                    throw new InvalidOperationException () ;
+                                if (meth.Name == nameof (TemplateHelpers.IsNull) ||
+                                    meth.Name == nameof (TemplateHelpers.IsNullReference))
+                                {
+                                    newinsn.OpCode  = OpCodes.Ldnull ;
+                                    newinsn.Operand = null ;
 
-                                newinsn.OpCode  = OpCodes.Ldnull ;
-                                newinsn.Operand = null ;
-                                continue ;
+                                    il.Emit (OpCodes.Ceq) ;
+                                    continue ;
+                                }
+
+                                if (meth.Name == nameof (TemplateHelpers.Null))
+                                {
+                                    newinsn.OpCode  = OpCodes.Ldnull ;
+                                    newinsn.Operand = null ;
+                                    continue ;
+                                }
                             }
 
                             if (meth.Name == nameof (TemplateHelpers.Return))
