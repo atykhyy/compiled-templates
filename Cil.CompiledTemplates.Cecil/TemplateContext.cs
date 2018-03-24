@@ -359,7 +359,7 @@ namespace Cil.CompiledTemplates.Cecil
         protected override void CopyField (FieldInfo field)
         {
             var template = field ;
-            var newfield = new FieldDefinition (template.Name, (Mono.Cecil.FieldAttributes) template.Attributes, GetType (template.FieldType)) ;
+            var newfield = new FieldDefinition (GetEmitName (field), (Mono.Cecil.FieldAttributes) template.Attributes, GetType (template.FieldType)) ;
 
             CopyCAs   (template, newfield) ;
             GetTarget (template).Fields.Add (newfield) ;
@@ -367,9 +367,6 @@ namespace Cil.CompiledTemplates.Cecil
             var emitAttr  = field.GetCustomAttribute<EmitNameAttribute> () ;
             if (emitAttr != null)
             {
-                if (emitAttr.Name != null)
-                    newfield.Name  = emitAttr.Name ;
-
                 if (emitAttr.ReadOnly)
                     newfield.IsInitOnly = true ;
 
