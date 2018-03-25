@@ -156,14 +156,14 @@ namespace Cil.CompiledTemplates.Cecil
     }
 
     /// <summary>
-    /// Indicates that the explicit implementation of the interface
+    /// Indicates that the implementation of the interface
     /// is to be copied when all the supplied labels match.
     /// </summary>
     [AttributeUsage (AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = true)]
-    public sealed class EmitExplicitInterfaceImplAttribute : Attribute, IEmitLabelAttribute
+    public sealed class EmitInterfaceImplAttribute : Attribute, IEmitLabelAttribute
     {
         /// <exclude/>
-        public EmitExplicitInterfaceImplAttribute (Type @interface, params Type[] labels)
+        public EmitInterfaceImplAttribute (Type @interface, params Type[] labels)
         {
             if (labels == null)
                 throw new ArgumentNullException () ;

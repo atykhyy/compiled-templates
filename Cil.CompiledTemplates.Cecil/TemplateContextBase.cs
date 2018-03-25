@@ -11,7 +11,6 @@
 
 #region --[Namespaces]----------------------------------------------------
 using System ;
-using System.Linq        ;
 using System.Linq.Expressions ;
 using System.Collections.Generic   ;
 using System.Collections.Immutable ;
@@ -249,9 +248,9 @@ namespace Cil.CompiledTemplates.Cecil
                 if (MatchesLabel (field, labels))
                     CopyField    (field) ;
 
-            foreach (var ca in template.GetCustomAttributes<EmitExplicitInterfaceImplAttribute> ())
+            foreach (var ca in template.GetCustomAttributes<EmitInterfaceImplAttribute> ())
                 if (MatchesLabel (ca, labels))
-                    CopyExplicitInterfaceImpl (template, ca.Interface) ;
+                    CopyInterfaceImpl (template, ca.Interface) ;
         }
 
         private bool MatchesLabel (MemberInfo member, HashSet<Type> labels)
@@ -383,10 +382,10 @@ namespace Cil.CompiledTemplates.Cecil
         public abstract void CopyNested (Type type, TypeAttributes set = 0, TypeAttributes clear = 0) ;
 
         /// <summary>
-        /// Copies all members comprising the explicit implementation
+        /// Copies all members comprising the implementation
         /// of the specified interface in <paramref name="template"/>.
         /// </summary>
-        public abstract void CopyExplicitInterfaceImpl (Type template, Type iface) ;
+        public abstract void CopyInterfaceImpl (Type template, Type iface) ;
 
         /// <summary>
         /// Copies the template field

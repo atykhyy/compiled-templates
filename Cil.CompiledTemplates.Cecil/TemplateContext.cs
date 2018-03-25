@@ -263,11 +263,40 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <inherit/>
-        public override void CopyExplicitInterfaceImpl (Type template, Type type)
+        public override void CopyInterfaceImpl (Type template, Type type)
         {
-            var fixups = new Dictionary<MethodBase, Action<MethodDefinition>> () ;
-            var prefix = type.GetPseudoSourceFullName () ;
-            var target = (TypeDefinition) m_dictionary[template] ;
+            var prefix  = type.GetPseudoSourceFullName () ;
+            var target  = (TypeDefinition) m_dictionary[template] ;
+
+            var mapping = template.GetInterfaceMap (type) ;
+            var fixups  = new Dictionary<MethodBase, MethodDefinition> () ;
+
+            for (int i  = 0 ; i < mapping.TargetMethods.Length ; ++i)
+            {
+                MethodDefinition copy ;
+
+                // already copied?
+                object value ;
+                if (!m_dictionary.TryGetValue (mapping.TargetMethods[i], out value))
+                {
+                    // TODO: I used to add a suppression attribute for CA1033 for these methods,
+                    // but that attribute is [Conditional]; I am not sure how this all works
+                    // TODO: what if an implementing method is picked up from a base class?
+                    copy = CopyMethodInternal (mapping.TargetMethods[i]) ;
+                }
+                else
+                {
+                    copy = (MethodDefinition) value ;
+
+                    // if a [TemplateParameter] method was copied as override,
+                    // add appropriate method attributes
+                    if(!copy.IsVirtual)
+                        copy.Attributes |= Mono.Cecil.MethodAttributes.Virtual | Mono.Cecil.MethodAttributes.NewSlot | Mono.Cecil.MethodAttributes.Final ;
+                }
+
+                copy.Overrides.Add (GetMethod (mapping.InterfaceMethods[i])) ;
+                fixups.Add                    (mapping.InterfaceMethods[i], copy) ;
+            }
 
             foreach (var property in type.GetProperties ())
             {
@@ -284,8 +313,8 @@ namespace Cil.CompiledTemplates.Cecil
 
                 target.Properties.Add (prop) ;
 
-                if (property.GetMethod != null) fixups.Add (property.GetMethod, _ => prop.GetMethod = _) ;
-                if (property.SetMethod != null) fixups.Add (property.GetMethod, _ => prop.SetMethod = _) ;
+                if (property.GetMethod != null) prop.GetMethod = fixups[property.GetMethod] ;
+                if (property.SetMethod != null) prop.SetMethod = fixups[property.SetMethod] ;
             }
 
             foreach (var event_ in type.GetEvents ())
@@ -295,25 +324,8 @@ namespace Cil.CompiledTemplates.Cecil
 
                 target.Events.Add (evt) ;
 
-                if (event_.AddMethod    != null) fixups.Add (event_.AddMethod,    _ => evt.AddMethod    = _) ;
-                if (event_.RemoveMethod != null) fixups.Add (event_.RemoveMethod, _ => evt.RemoveMethod = _) ;
-            }
-
-            var mapping = template.GetInterfaceMap (type) ;
-
-            for (int i  = 0 ; i < mapping.TargetMethods.Length ; ++i)
-            {
-                // TODO: I used to add a suppression attribute for CA1033 for these methods,
-                // but that attribute is [Conditional]; I am not sure how this all works
-                var copy = CopyMethodInternal (mapping.TargetMethods[i]) ;
-                if(!copy.IsPrivate)
-                    throw new InvalidOperationException () ;
-
-                copy.Overrides.Add (GetMethod (mapping.InterfaceMethods[i])) ;
-
-                Action<MethodDefinition> fixup ;
-                if (fixups.TryGetValue (mapping.InterfaceMethods[i], out fixup))
-                    fixup (copy) ;
+                if (event_.AddMethod    != null) evt.AddMethod    = fixups[event_.AddMethod]    ;
+                if (event_.RemoveMethod != null) evt.RemoveMethod = fixups[event_.RemoveMethod] ;
             }
 
             target.Interfaces.Add (new InterfaceImplementation (GetType (type))) ;
