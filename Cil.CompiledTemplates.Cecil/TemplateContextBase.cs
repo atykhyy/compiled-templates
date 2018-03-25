@@ -152,6 +152,13 @@ namespace Cil.CompiledTemplates.Cecil
 
         protected MethodBase GetTemplatedMethod (MethodBase method, Type source)
         {
+            if (source == method.DeclaringType)
+                source  = null ;
+
+            // support templated methods in quasi-generic nested types
+            if (method.DeclaringType.IsGenericType && !method.DeclaringType.IsGenericTypeDefinition)
+                method = method.Module.ResolveMethod  (method.MetadataToken) ;
+
             return VerifyTemplatedMember (GetMethodInType (method, source)) ;
         }
 
