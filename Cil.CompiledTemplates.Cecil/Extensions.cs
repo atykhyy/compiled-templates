@@ -46,6 +46,11 @@ namespace Cil.CompiledTemplates.Cecil
             return result ;
         }
 
+        public static bool IsGenericInstance (this Type type)
+        {
+            return type.IsGenericType && !type.IsGenericTypeDefinition ;
+        }
+
         public static Type GetReturnType (this MethodBase member)
         {
             var method  = member as MethodInfo ;

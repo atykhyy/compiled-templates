@@ -294,8 +294,9 @@ namespace Cil.CompiledTemplates.Cecil
                         copy.Attributes |= Mono.Cecil.MethodAttributes.Virtual | Mono.Cecil.MethodAttributes.NewSlot | Mono.Cecil.MethodAttributes.Final ;
                 }
 
-                copy.Overrides.Add (GetMethod (mapping.InterfaceMethods[i])) ;
-                fixups.Add                    (mapping.InterfaceMethods[i], copy) ;
+                var imethod = mapping.InterfaceMethods[i] ;
+                copy.Overrides.Add (ImportMethod (imethod)) ;
+                fixups.Add                       (imethod, copy) ;
             }
 
             foreach (var property in type.GetProperties ())
@@ -362,12 +363,6 @@ namespace Cil.CompiledTemplates.Cecil
             m_target.NestedTypes.Add (newtype) ;
 
             m_dictionary = m_dictionary.Add (template, newtype) ;
-
-            // if the type is generic, validate that all generic parameters
-            // are bound and that the emitted type is not actually generic
-            if (type.IsGenericTypeDefinition)
-                foreach (var parameter in type.GetGenericArguments ())
-                    GetType (parameter) ;
         }
 
         /// <inherit/>
@@ -1326,24 +1321,12 @@ namespace Cil.CompiledTemplates.Cecil
                             }
                         }
 
-                        newinsn.Operand = GetMethod (meth) ;
+                        newinsn.Operand = ImportMethod (meth) ;
                     }
                     else
                     if ((field = newinsn.Operand as FieldInfo) != null)
                     {
-                        if (field.DeclaringType.IsGenericType && !field.DeclaringType.IsGenericTypeDefinition)
-                        {
-                            var genfield = m_target.Module.ImportReference (meth.Module.ResolveField (field.MetadataToken)) ;
-
-                            newinsn.Operand = genfield.CloseDeclaringType (Array.ConvertAll (field.DeclaringType.GetGenericArguments (), GetType)) ;
-                        }
-                        else
-                        {
-                            // allow limited "forward declarations"
-                            newinsn.Operand = new FieldReference (GetEmitName (field),
-                                GetType (field.FieldType),
-                                GetType (field.DeclaringType)) ;
-                        }
+                        newinsn.Operand = ImportField (field) ;
                     }
                     else
                         throw new InvalidOperationException () ;
@@ -1466,78 +1449,15 @@ namespace Cil.CompiledTemplates.Cecil
                 return (TypeDefinition) m_dictionary[member.DeclaringType] ;
         }
 
-        private MethodReference GetMethod (MethodBase meth)
+        private TypeReference GetType (Type type)
         {
-            // TODO: what if a method is both?
-            // to deal with all the potential complexities, I'll have
-            // to re-implement the import code in Mono.Cecil/Import.cs
-            // inserting template bindings and GetEmitName's where appropriate
-            if (meth.IsGenericMethod)
-            {
-                var newmeth = new GenericInstanceMethod (m_target.Module.ImportReference (
-                    ((MethodInfo)meth).GetGenericMethodDefinition ())) ;
-
-                foreach (var typeArgument in meth.GetGenericArguments ())
-                    newmeth.GenericArguments.Add (GetType (typeArgument)) ;
-
-                return newmeth ;
-            }
-            else
-            if (meth.DeclaringType.IsGenericType && !meth.DeclaringType.IsGenericTypeDefinition)
-            {
-                var genmeth = m_target.Module.ImportReference (meth.Module.ResolveMethod (meth.MetadataToken)) ;
-
-                return genmeth.CloseDeclaringType (Array.ConvertAll (meth.DeclaringType.GetGenericArguments (), GetType)) ;
-            }
-            else
-            {
-                // allow limited "forward declarations"
-                var newmeth = new MethodReference (GetEmitName (meth),
-                    GetType (meth.GetReturnType ()),
-                    GetType (meth.DeclaringType)) ;
-
-                newmeth.HasThis      = (meth.CallingConvention & CallingConventions.HasThis)      != 0 ;
-                newmeth.ExplicitThis = (meth.CallingConvention & CallingConventions.ExplicitThis) != 0 ;
-
-                foreach (var param in meth.GetParameters ())
-                    newmeth.Parameters.Add (new ParameterDefinition (param.Name, (Mono.Cecil.ParameterAttributes) param.Attributes,
-                        GetType (param.ParameterType))) ;
-
-                return newmeth ;
-            }
-        }
-
-        private new TypeReference GetType (Type type)
-        {
-            return (TypeReference) base.GetType (type) ;
+            return (TypeReference) base.GetType (type, null, true) ;
         }
 
         /// <inherit/>
-        protected override object GetTypeInternal (Type type)
+        protected override object GetTypeInternal (Type type, object genericContext, bool asOpen)
         {
-            if (type.IsGenericParameter)
-                throw new InvalidOperationException () ; // unbound generic parameter
-
-            object value ;
-            if (type.DeclaringType != null && m_dictionary.TryGetValue (type.DeclaringType, out value))
-            {
-                // allow limited "forward declarations"
-                var emitName = GetEmitName (type) ;
-                var emitType = ((TypeReference) value).Resolve ().NestedTypes.Single (_ => _.Name == emitName) ;
-                return emitType.Module != m_target.Module ? m_target.Module.ImportReference (emitType) : emitType ;
-            }
-
-            if (type.IsGenericType && !type.IsGenericTypeDefinition)
-            {
-                var git  = new GenericInstanceType (GetType (type.GetGenericTypeDefinition ())) ;
-
-                foreach (var param in type.GetGenericArguments ())
-                    git.GenericArguments.Add (GetType (param)) ;
-
-                return git ;
-            }
-            else
-                return m_target.Module.ImportReference (type) ;
+            return ImportTypeInternal (type, new ImportGenericContext (genericContext), asOpen) ;
         }
 
         private void CopyCAs (MemberInfo from, Mono.Cecil.ICustomAttributeProvider to)
@@ -1567,6 +1487,304 @@ namespace Cil.CompiledTemplates.Cecil
 
                     to.CustomAttributes.Add (newca) ; // TODO: templated items in custom attributes?
                 }
+        }
+        #endregion
+
+        #region --[Methods: Templated reflection importer]----------------
+        TypeReference ImportType (Type type, ImportGenericContext context, bool asOpen = true)
+        {
+            return (TypeReference) base.GetType (type, context.Value, asOpen) ;
+        }
+
+        TypeReference ImportTypeInternal (Type type, ImportGenericContext context, bool asOpen)
+        {
+            if (type.IsByRef)
+                return new ByReferenceType (ImportType (type.GetElementType (), context)) ;
+
+            if (type.IsPointer)
+                return new PointerType (ImportType (type.GetElementType (), context)) ;
+
+            if (type.IsArray)
+                return new ArrayType (ImportType (type.GetElementType (), context), type.GetArrayRank ()) ;
+
+            if (type.IsGenericParameter)
+            {
+                if (type.DeclaringMethod != null)
+                    return context.MethodParameter  (NormalizeMethodName   (type.DeclaringMethod), type.GenericParameterPosition) ;
+
+                if (type.DeclaringType != null)
+                    return context.TypeParameter    (NormalizeTypeFullName (type.DeclaringType), type.GenericParameterPosition) ;
+
+                throw new InvalidOperationException () ;
+            }
+
+            if (type.IsGenericType && (!type.IsGenericTypeDefinition || asOpen))
+                return ImportGenericInstance (type, context);
+
+            // invoke module's reflection importer to obtain the correct scope
+            var moduleReference = m_target.Module.ImportReference (type) ;
+
+            switch (Type.GetTypeCode (type))
+            {
+            case TypeCode.Boolean:
+            case TypeCode.Byte:
+            case TypeCode.Char:
+            case TypeCode.Decimal:
+            case TypeCode.Double:
+            case TypeCode.Int16:
+            case TypeCode.Int32:
+            case TypeCode.Int64:
+            case TypeCode.SByte:
+            case TypeCode.Single:
+            case TypeCode.String:
+            case TypeCode.UInt16:
+            case TypeCode.UInt32:
+            case TypeCode.UInt64:
+                return moduleReference ;
+            }
+
+            if (type == typeof (void)      ||
+                type == typeof (Object)    ||
+                type == typeof (ValueType) ||
+                type == typeof (IntPtr)    ||
+                type == typeof (UIntPtr)   ||
+                type == typeof (TypedReference))
+            {
+                return moduleReference ;
+            }
+
+            // allow limited "forward declarations"
+            var reference = new TypeReference (string.Empty, GetEmitName (type),
+                m_target.Module, moduleReference.Scope, type.IsValueType) ;
+
+            if (type.IsNested)
+                reference.DeclaringType = ImportType (type.DeclaringType, context, asOpen) ;
+            else
+                reference.Namespace = type.Namespace ?? string.Empty ;
+
+            if (type.IsGenericType)
+                ImportGenericParameters (reference, type.GetGenericArguments ()) ;
+
+            return reference ;
+        }
+
+        TypeReference ImportGenericInstance (Type type, ImportGenericContext context)
+        {
+            var elementType = ImportType (type.GetGenericTypeDefinition (), context, false) ;
+
+            // NB: this check prevents adding unnecessary generic arguments
+            // to the imported reference when `type` is a quasi-generic
+            // template type that emits a non-generic type definition
+            // I have no idea what will happen if emitting a genuine generic
+            // type definition, and in particular mixing bound (quasi)
+            // and unbound generic parameters will be difficult and may require
+            // keeping a mapping between template and emitted generic parameters
+            // in ImportGenericContext
+            if(!elementType.HasGenericParameters)
+                return elementType ;
+
+            var instance = new GenericInstanceType (elementType) ;
+
+            using (context.Push (elementType))
+            {
+                var arguments = type.GetGenericArguments () ;
+                var instArgs  = instance.GenericArguments ;
+
+                for (int i = 0 ; i < arguments.Length ; ++i)
+                    instArgs.Add (ImportType (arguments[i], context)) ;
+            }
+
+            return instance ;
+        }
+
+        FieldReference ImportField (FieldInfo field, ImportGenericContext context = default (ImportGenericContext))
+        {
+            var declaringType = ImportType (field.DeclaringType, context) ;
+
+            // NB: only go via the context route if I'm going to import the field into a generic
+            if (field.DeclaringType.IsGenericInstance () && declaringType.IsGenericInstance)
+                field = field.Module.ResolveField (field.MetadataToken) ;
+
+            using (context.Push (declaringType))
+            {
+                // allow limited "forward declarations"
+                return new FieldReference (GetEmitName (field), ImportType (field.FieldType, context), declaringType) ;
+            }
+        }
+
+        MethodReference ImportMethod (MethodBase method, ImportGenericContext context = default (ImportGenericContext), bool asOpen = true)
+        {
+            if (method.IsGenericMethod && (!method.IsGenericMethodDefinition || asOpen))
+                return ImportMethodSpecification (method, context) ;
+
+            var declaringType = ImportType (method.DeclaringType, context) ;
+
+            // NB: only go via the context route if I'm going to import the field into a generic
+            if (method.DeclaringType.IsGenericInstance () && declaringType.IsGenericInstance)
+                method = method.Module.ResolveMethod (method.MetadataToken) ;
+
+            // allow limited "forward declarations"
+            var reference = new MethodReference (GetEmitName (method), m_tVoid)
+            {
+                HasThis       = method.CallingConvention.HasFlag (CallingConventions.HasThis),
+                ExplicitThis  = method.CallingConvention.HasFlag (CallingConventions.ExplicitThis),
+                DeclaringType = ImportType (method.DeclaringType, context, false), // for generic context
+            } ;
+
+            if (method.CallingConvention.HasFlag (CallingConventions.VarArgs))
+                reference.CallingConvention &= MethodCallingConvention.VarArg ;
+
+            if (method.IsGenericMethod)
+                ImportGenericParameters (reference, method.GetGenericArguments ()) ;
+
+            using (context.Push (reference))
+            {
+                var methodInfo  = method as MethodInfo ;
+                if (methodInfo != null)
+                    reference.ReturnType = ImportType (methodInfo.ReturnType, context) ;
+
+                var parameters = method.GetParameters () ;
+                var refParams  = reference.Parameters ;
+
+                for (int i = 0 ; i < parameters.Length ; ++i)
+                    refParams.Add (new ParameterDefinition (ImportType (parameters[i].ParameterType, context))) ;
+            }
+
+            reference.DeclaringType = declaringType ;
+            return reference ;
+        }
+
+        MethodReference ImportMethodSpecification (MethodBase method, ImportGenericContext context)
+        {
+            var methodInfo  = method as MethodInfo ;
+            if (methodInfo == null)
+                throw new InvalidOperationException () ;
+
+            var elementMethod = ImportMethod (methodInfo.GetGenericMethodDefinition (), context, false) ;
+            var instance      = new GenericInstanceMethod (elementMethod) ;
+
+            using (context.Push (elementMethod))
+            {
+                var arguments = method.GetGenericArguments () ;
+                var instArgs  = instance.GenericArguments ;
+
+                for (int i = 0 ; i < arguments.Length ; ++i)
+                    instArgs.Add (ImportType (arguments[i], context)) ;
+            }
+
+            return instance ;
+        }
+
+        static string NormalizeMethodName (MethodBase method)
+        {
+            return NormalizeTypeFullName (method.DeclaringType) + "." + method.Name ;
+        }
+
+        static string NormalizeTypeFullName (Type type)
+        {
+            return type.IsNested ? NormalizeTypeFullName (type.DeclaringType) + "/" + type.Name : type.FullName ;
+        }
+
+        static void ImportGenericParameters (IGenericParameterProvider provider, Type[] arguments)
+        {
+            var parameters = provider.GenericParameters ;
+
+            foreach (var argument in arguments)
+                parameters.Add (new GenericParameter (argument.Name, provider)) ;
+        }
+        #endregion
+    }
+
+    struct ImportGenericContext : IDisposable
+    {
+        #region --[Fields: Private]---------------------------------------
+        private List<IGenericParameterProvider> m_stack ;
+        #endregion
+
+        #region --[Constructors]------------------------------------------
+        public ImportGenericContext (IGenericParameterProvider provider)
+        {
+            if (provider == null)
+                throw new ArgumentNullException (nameof (provider)) ;
+
+            m_stack = null  ;
+            Push (provider) ;
+        }
+
+        public ImportGenericContext (object value)
+        {
+            m_stack = (List<IGenericParameterProvider>) value ;
+        }
+        #endregion
+
+        #region --[Properties: Public]------------------------------------
+        public object Value { get { return m_stack ; }}
+        #endregion
+
+        #region --[Methods]-----------------------------------------------
+        public ImportGenericContext Push (IGenericParameterProvider provider)
+        {
+            if (m_stack == null)
+                m_stack  = new List<IGenericParameterProvider> (1) ;
+
+            m_stack.Add (provider) ;
+            return this ;
+        }
+
+        void IDisposable.Dispose ()
+        {
+            m_stack.RemoveAt (m_stack.Count - 1) ;
+        }
+
+        public TypeReference TypeParameter (string type, int position)
+        {
+            if  (null != m_stack)
+            for (int i = m_stack.Count - 1 ; i >= 0 ; --i)
+            {
+                var candidate = GenericTypeFor (m_stack[i]) ;
+                if (candidate.FullName != type)
+                    continue ;
+
+                return candidate.GenericParameters[position] ;
+            }
+
+            throw new InvalidOperationException () ;
+        }
+
+        public TypeReference MethodParameter (string method, int position)
+        {
+            if  (null != m_stack)
+            for (int i = m_stack.Count - 1 ; i >= 0 ; --i)
+            {
+                var candidate  = m_stack[i] as MethodReference ;
+                if (candidate == null)
+                    continue ;
+
+                if (method != NormalizeMethodName (candidate))
+                    continue ;
+
+                return candidate.GenericParameters[position] ;
+            }
+
+            throw new InvalidOperationException () ;
+        }
+
+        static string NormalizeMethodName (MethodReference method)
+        {
+            return method.DeclaringType.GetElementType ().FullName + "." + method.Name ;
+        }
+
+        static TypeReference GenericTypeFor (IGenericParameterProvider context)
+        {
+            var type  = context as TypeReference ;
+            if (type != null)
+                return type.GetElementType () ;
+
+            var method  = context as MethodReference ;
+            if (method != null)
+                return method.DeclaringType.GetElementType () ;
+
+            throw new InvalidOperationException () ;
         }
         #endregion
     }

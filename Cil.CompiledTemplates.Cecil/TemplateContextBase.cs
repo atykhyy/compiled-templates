@@ -156,8 +156,8 @@ namespace Cil.CompiledTemplates.Cecil
                 source  = null ;
 
             // support templated methods in quasi-generic nested types
-            if (method.DeclaringType.IsGenericType && !method.DeclaringType.IsGenericTypeDefinition)
-                method = method.Module.ResolveMethod  (method.MetadataToken) ;
+            if (method.DeclaringType.IsGenericInstance ())
+                method = method.Module.ResolveMethod   (method.MetadataToken) ;
 
             return VerifyTemplatedMember (GetMethodInType (method, source)) ;
         }
@@ -561,7 +561,7 @@ namespace Cil.CompiledTemplates.Cecil
             return member ;
         }
 
-        protected object GetType (Type type)
+        protected object GetType (Type type, object genericContext, bool asOpen)
         {
             object value ;
             if (m_dictionary.TryGetValue (type, out value))
@@ -572,7 +572,7 @@ namespace Cil.CompiledTemplates.Cecil
                 object labels ;
                 if (m_dictionary.TryGetValue (s_label, out labels))
                     if (MatchCopyNested (type, (HashSet<Type>)labels))
-                        return GetType  (type) ;
+                        return GetType  (type, genericContext, asOpen) ;
 
                 // fall through: may be bound with [BindLabel]
             }
@@ -583,17 +583,20 @@ namespace Cil.CompiledTemplates.Cecil
                 if (m_dictionary.TryGetValue (s_label, out labels))
                     foreach (var bl in type.GetCustomAttributes<BindLabelAttribute> (false))
                         if (MatchesLabel (bl, (HashSet<Type>)labels))
-                            return GetType (bl.Type) ;
+                            return GetType (bl.Type, genericContext, asOpen) ;
 
-                // fall through: may be forward reference
+                if(!type.IsDefined (typeof (EmitNameAttribute)))
+                    throw new InvalidOperationException () ; // templated type not bound
+
+                // fall through: forward reference
             }
 
-            value        = GetTypeInternal  (type) ;
+            value        = GetTypeInternal  (type, genericContext, asOpen) ;
             m_dictionary = m_dictionary.Add (type, value) ;
             return value ;
         }
 
-        protected abstract object GetTypeInternal (Type type) ;
+        protected abstract object GetTypeInternal (Type type, object genericContext, bool asOpen) ;
 
         protected string GetEmitName (MemberInfo member)
         {
