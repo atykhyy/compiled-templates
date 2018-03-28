@@ -198,6 +198,17 @@ namespace Cil.CompiledTemplates.Cecil
         /// <remarks>
         /// The lambda expression must have the form (...) => ....Method (...).
         /// </remarks>
+        public static MethodReference Import<U, V> (this ModuleDefinition module, Expression<Action<U, V>> expr)
+        {
+            return ImportMethodGenericize (module, expr.Body) ;
+        }
+
+        /// <summary>
+        /// Imports the method identified by the lambda expression <paramref name="expr"/>.
+        /// </summary>
+        /// <remarks>
+        /// The lambda expression must have the form (...) => ....Method (...).
+        /// </remarks>
         public static MethodReference Import<T, U> (this ModuleDefinition module, Expression<Func<T, U>> expr)
         {
             return ImportMethodGenericize (module, expr.Body) ;

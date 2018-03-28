@@ -509,6 +509,20 @@ namespace Cil.CompiledTemplates.Cecil
         /// if the template method has the <see cref="TemplatedThisAttribute"/>,
         /// are bound to the elements of <paramref name="templatedArguments"/> in order.
         /// </summary>
+        public void Splice<P1, P2> (ILProcessor il, SpliceLocation location, Action<P1, P2> d, params object[] templatedArguments)
+        {
+            SpliceMethod (d.Method, il, location, templatedArguments) ;
+        }
+
+        /// <summary>
+        /// Splices the template method that is the target of the supplied delegate
+        /// into <paramref name="il"/> at the indicated location.
+        /// <para/>
+        /// Templated method parameters that are not marked <see cref="FromILStackAttribute"/>,
+        /// including the implicit <c>this</c> parameter
+        /// if the template method has the <see cref="TemplatedThisAttribute"/>,
+        /// are bound to the elements of <paramref name="templatedArguments"/> in order.
+        /// </summary>
         public void Splice<T> (ILProcessor il, SpliceLocation location, Action<T> d, params object[] templatedArguments)
         {
             SpliceMethod (d.Method, il, location, templatedArguments) ;
