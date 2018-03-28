@@ -339,7 +339,39 @@ namespace Cil.CompiledTemplates.Cecil
             if (!type.IsNested || !type.DeclaringType.IsAssignableFrom (m_template))
                 throw new ArgumentOutOfRangeException (nameof (type)) ;
 
-            var template = type ;
+            Type template ;
+            var isInstance = type.IsGenericInstance () ;
+            if (isInstance)
+            {
+                // NB: generic types are always copied from the generic type
+                // definition, but from outside the type reflection references
+                // the generic instance type. to support such references, I
+                // (a) check whether the corresponding generic type definition
+                // has already been copied, and (b) add a dictionary entry
+                // binding the generic instance type to the type copied from
+                // the generic type definition template.
+                // This approach precludes copying a generic type definition
+                // multiple times with its generic parameters bound to different
+                // types - that would require passing around the generic context
+                // and using it to 'instantiate' all keys created when copying
+                // the generic type definition in that context. This seems like
+                // a lot of work, and I am not sure how useful it would be.
+                //
+                // NB: I don't check here that the template's generic parameters
+                // are bound to something matching the generic instance type's
+                // generic arguments, but if it doesn't peverify will flag it.
+                template = type.GetGenericTypeDefinition () ;
+
+                object temp ;
+                if (m_dictionary.TryGetValue (template, out temp))
+                {
+                    m_dictionary = m_dictionary.Add  (type, temp) ;
+                    return ;
+                }
+            }
+            else
+                template = type ;
+
             var newtype  = new TypeDefinition (null, GetEmitName (type), (Mono.Cecil.TypeAttributes)((template.Attributes & ~clear) | set)) ;
 
             var emitAttr  = type.GetCustomAttribute<EmitNameAttribute> () ;
@@ -353,16 +385,19 @@ namespace Cil.CompiledTemplates.Cecil
             }
 
             // set the base type if it's templated
-            if (type.BaseType.Assembly == typeof (object).Assembly ||
-                type.BaseType.IsDefined  (typeof (TemplatedMemberAttribute), false))
+            if (template.BaseType.Assembly == typeof (object).Assembly ||
+                template.BaseType.IsDefined  (typeof (TemplatedMemberAttribute), false))
             {
-                newtype.BaseType = GetType (type.BaseType) ;
+                newtype.BaseType = GetType (template.BaseType) ;
             }
 
             CopyCAs        (template, newtype) ;
             m_target.NestedTypes.Add (newtype) ;
 
             m_dictionary = m_dictionary.Add (template, newtype) ;
+
+            if (isInstance)
+                m_dictionary = m_dictionary.Add (type, newtype) ;
         }
 
         /// <inherit/>
