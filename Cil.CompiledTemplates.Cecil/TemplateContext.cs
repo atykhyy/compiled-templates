@@ -592,6 +592,18 @@ namespace Cil.CompiledTemplates.Cecil
             var parameters  = source.GetParameters () ;
             var fromILStack = parameters.Length ;
 
+            IList<ParameterDefinition> targetParameters ;
+            if (source.IsStatic && !il.Body.Method.IsStatic)
+            {
+                targetParameters = new List<ParameterDefinition> (il.Body.Method.Parameters.Count + 1) ;
+                targetParameters.Add (il.Body.ThisParameter) ;
+
+                foreach (var parameter in il.Body.Method.Parameters)
+                    targetParameters.Add (parameter) ;
+            }
+            else
+                targetParameters = il.Body.Method.Parameters ;
+
             for ( ; p < parameters.Length ; ++p)
             {
                 if (parameters[p].IsDefined (typeof (TemplatedParameterAttribute)))
@@ -600,13 +612,13 @@ namespace Cil.CompiledTemplates.Cecil
                 if (parameters[p].IsDefined (typeof (FromILStackAttribute)))
                     throw new InvalidOperationException () ; // must be templated
 
-                if (il.Body.Method.Parameters.Count <= p)
+                if (targetParameters.Count <= p)
                     throw new InvalidOperationException () ; // not enough parameters in target method to match splice's non-templated parameters
 
-                if(!il.Body.Method.Parameters[p].ParameterType.SameAs (GetType (parameters[p].ParameterType)))
+                if(!targetParameters[p].ParameterType.SameAs (GetType (parameters[p].ParameterType)))
                     throw new InvalidOperationException () ; // splice's non-templated parameter type does not match target method parameter type
 
-                dictionary.Add (parameters[p], il.Body.Method.Parameters[p]) ;
+                dictionary.Add (parameters[p], targetParameters[p]) ;
             }
 
             for ( ; p < parameters.Length ; ++p, ++a)
