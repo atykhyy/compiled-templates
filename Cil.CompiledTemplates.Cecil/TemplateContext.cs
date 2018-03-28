@@ -1360,6 +1360,18 @@ namespace Cil.CompiledTemplates.Cecil
                                 }
                             }
 
+                            if (meth.Name == nameof (TemplateHelpers.CtorCall))
+                            {
+                                if (newinsn.Previous.OpCode != OpCodes.Newobj)
+                                    throw new InvalidOperationException () ;
+
+                                newinsn.Previous.OpCode = OpCodes.Call ;
+
+                                newinsn.OpCode  = OpCodes.Nop ;
+                                newinsn.Operand = null ;
+                                continue ;
+                            }
+
                             if (meth.Name == nameof (TemplateHelpers.Return))
                             {
                                 newinsn.OpCode  = OpCodes.Ret ;

@@ -72,6 +72,18 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <summary>
+        /// Valid usage patterns: <c>this.CtorCall (new ThisType (...))</c>
+        /// and <c>this.CtorCall (new BaseType (...))</c>. A call to this
+        /// method with <paramref name="other"/> being an object creation
+        /// expression is converted to a <c>this</c>/<c>base</c> constructor
+        /// call.
+        /// </summary>
+        public static void CtorCall<U, V> (this U self, V other) where U : V
+        {
+            throw new InvalidProgramException () ;
+        }
+
+        /// <summary>
         /// Container for the pseudo-field <see cref="Lvalue"/>.
         /// </summary>
         public struct RefThis<T> where T : struct
