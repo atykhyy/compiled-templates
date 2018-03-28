@@ -72,6 +72,27 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <summary>
+        /// Container for the pseudo-field <see cref="Lvalue"/>.
+        /// </summary>
+        public struct RefThis<T> where T : struct
+        {
+            /// <summary>
+            /// A reference to this field is converted to a load of the implicit
+            /// `this` argument, regardless of the template type of <c>T</c>.
+            /// </summary>
+            /// <remarks>
+            /// This field helps to work around the limitations of C# compiler
+            /// and pass a reference to `this` to members outside of a generic
+            /// nested template type that take it via generic instance types.
+            /// The references' generic arguments must match the template's
+            /// bound type parameters.
+            /// </remarks>
+            #pragma warning disable 0649
+            public static T Lvalue ;
+            #pragma warning restore 0649
+        }
+
+        /// <summary>
         /// A call to this method is converted to a return instruction
         /// in emitted code, returning the value passed to the method.
         /// </summary>

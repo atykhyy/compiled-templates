@@ -1373,6 +1373,22 @@ namespace Cil.CompiledTemplates.Cecil
                     else
                     if ((field = newinsn.Operand as FieldInfo) != null)
                     {
+                        if (field.DeclaringType.DeclaringType == typeof (TemplateHelpers))
+                        {
+                            if (field.DeclaringType.Name.StartsWith (nameof (TemplateHelpers.RefThis<int>)))
+                            {
+                                if (il.Body.Method.IsStatic ||
+                                   !il.Body.Method.DeclaringType.IsValueType)
+                                {
+                                    throw new InvalidOperationException () ;
+                                }
+
+                                newinsn.OpCode  = OpCodes.Ldarg_0 ;
+                                newinsn.Operand = null ;
+                                continue ;
+                            }
+                        }
+
                         newinsn.Operand = ImportField (field) ;
                     }
                     else
