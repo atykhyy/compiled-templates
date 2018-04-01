@@ -1337,7 +1337,7 @@ namespace Cil.CompiledTemplates.Cecil
                         // process template helper methods
                         if (meth.DeclaringType == typeof (TemplateHelpers))
                         {
-                            if (GetType (meth.GetGenericArguments ()[0]).IsValueType)
+                            if (meth.IsGenericMethod && GetType (meth.GetGenericArguments ()[0]).IsValueType)
                             {
                                 if (meth.Name == nameof (TemplateHelpers.IsNull) ||
                                     meth.Name == nameof (TemplateHelpers.Null))
