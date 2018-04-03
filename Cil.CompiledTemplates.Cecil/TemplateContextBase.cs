@@ -561,7 +561,7 @@ namespace Cil.CompiledTemplates.Cecil
             return member ;
         }
 
-        protected object GetType (Type type, object genericContext, bool asOpen)
+        protected object GetType (Type type, object genericContext, bool asOpen, bool throwIfNotBound)
         {
             object value ;
             if (m_dictionary.TryGetValue (type, out value))
@@ -572,7 +572,7 @@ namespace Cil.CompiledTemplates.Cecil
                 object labels ;
                 if (m_dictionary.TryGetValue (s_label, out labels))
                     if (MatchCopyNested (type, (HashSet<Type>)labels))
-                        return GetType  (type, genericContext, asOpen) ;
+                        return GetType  (type, genericContext, asOpen, throwIfNotBound) ;
 
                 // fall through: may be bound with [BindLabel]
             }
@@ -583,10 +583,16 @@ namespace Cil.CompiledTemplates.Cecil
                 if (m_dictionary.TryGetValue (s_label, out labels))
                     foreach (var bl in type.GetCustomAttributes<BindLabelAttribute> (false))
                         if (MatchesLabel (bl, (HashSet<Type>)labels))
-                            return GetType (bl.Type, genericContext, asOpen) ;
+                            return GetType (bl.Type, genericContext, asOpen, throwIfNotBound) ;
 
                 if(!type.IsDefined (typeof (EmitNameAttribute)))
-                    throw new InvalidOperationException () ; // templated type not bound
+                {
+                    // templated type not bound and not marked as forward reference
+                    if (throwIfNotBound)
+                        throw new InvalidOperationException () ;
+
+                    return null ;
+                }
 
                 // fall through: forward reference
             }

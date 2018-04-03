@@ -82,6 +82,8 @@ namespace Cil.CompiledTemplates.Cecil
             m_tString  = target.Module.ImportReference (typeof (String)) ;
 
             m_dictionary = m_dictionary.Add (m_template, m_target) ;
+
+            m_vars.Add (m_template) ;
         }
         #endregion
 
@@ -210,6 +212,9 @@ namespace Cil.CompiledTemplates.Cecil
             default:
                 throw new ArgumentOutOfRangeException () ;
             }
+
+            if (typeof (T).IsEnum)
+                insn.Operand = value ;
 
             Add (GetTemplatedField (func, enforceIsStatic: true), insn) ;
         }
@@ -1489,10 +1494,67 @@ namespace Cil.CompiledTemplates.Cecil
             {
                 object value ;
                 if (m_dictionary.TryGetValue (typevar, out value) && value != null)
-                    scope.AddConstant (typevar.Name, m_tString, value.ToString ()) ;
+                {
+                    if (value is Instruction insn)
+                        value = insn.Operand ;
+
+                    TypeReference type ;
+                    switch (Type.GetTypeCode (value.GetType ()))
+                    {
+                    case TypeCode.Boolean:
+                    case TypeCode.Byte:
+                    case TypeCode.Char:
+                    case TypeCode.Double:
+                    case TypeCode.Int16:
+                    case TypeCode.Int32:
+                    case TypeCode.Int64:
+                    case TypeCode.SByte:
+                    case TypeCode.Single:
+                    case TypeCode.UInt16:
+                    case TypeCode.UInt32:
+                    case TypeCode.UInt64:
+                        type  = m_target.Module.ImportReference (value.GetType ()) ;
+                        break ;
+                    default:
+                        type  = m_tString ;
+                        value = value.ToString () ;
+                        break ;
+                    }
+
+                    scope.AddConstant (typevar.Name, type, value) ;
+                }
             }
 
+            if (gmta != null) AddQuasiGenericParameters (method,               gmta, scope) ;
+            if (gtta != null) AddQuasiGenericParameters (method.DeclaringType, gtta, scope) ;
             return scope ;
+        }
+
+        private void AddQuasiGenericParameters (MemberInfo context, Type[] types, Scope scope)
+        {
+            Type[] parameters = null ;
+
+            for (var i = 0 ; i < types.Length ; ++i)
+            {
+                var typevar = types[i] ;
+                if (typevar.IsGenericParameter)
+                {
+                    var bound  = GetType (typevar, throwIfNotBound: false) ;
+                    if (bound == null || bound.IsGenericParameter)
+                        continue ;
+
+                    scope.AddConstant (typevar.Name, m_tString, bound.ToString ()) ;
+                }
+                else
+                {
+                    if (parameters == null)
+                        parameters  = context.MemberType == MemberTypes.Method
+                            ? ((MethodInfo) context).GetGenericMethodDefinition ().GetGenericArguments ()
+                            : ((Type)       context).GetGenericTypeDefinition   ().GetGenericArguments () ;
+
+                    scope.AddConstant (parameters[i].Name, m_tString, GetType (typevar).ToString ()) ;
+                }
+            }
         }
 
         private Scope PrepareVariableScopes (MC.MethodBody body)
@@ -1538,9 +1600,9 @@ namespace Cil.CompiledTemplates.Cecil
                 return (TypeDefinition) m_dictionary[member.DeclaringType] ;
         }
 
-        private TypeReference GetType (Type type)
+        private TypeReference GetType (Type type, bool throwIfNotBound = true)
         {
-            return (TypeReference) base.GetType (type, null, true) ;
+            return (TypeReference) base.GetType (type, null, true, throwIfNotBound) ;
         }
 
         /// <inherit/>
@@ -1582,7 +1644,7 @@ namespace Cil.CompiledTemplates.Cecil
         #region --[Methods: Templated reflection importer]----------------
         TypeReference ImportType (Type type, ImportGenericContext context, bool asOpen = true)
         {
-            return (TypeReference) base.GetType (type, context.Value, asOpen) ;
+            return (TypeReference) base.GetType (type, context.Value, asOpen, true) ;
         }
 
         TypeReference ImportTypeInternal (Type type, ImportGenericContext context, bool asOpen)
