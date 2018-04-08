@@ -273,7 +273,7 @@ namespace Cil.CompiledTemplates.Cecil
             var prefix  = type.GetPseudoSourceFullName () ;
             var target  = (TypeDefinition) m_dictionary[template] ;
 
-            var mapping = template.GetInterfaceMap (type) ;
+            var mapping = GetTemplateInterfaceMap (template, type) ;
             var fixups  = new Dictionary<MethodBase, MethodDefinition> () ;
 
             for (int i  = 0 ; i < mapping.TargetMethods.Length ; ++i)
@@ -334,7 +334,7 @@ namespace Cil.CompiledTemplates.Cecil
                 if (event_.RemoveMethod != null) evt.RemoveMethod = fixups[event_.RemoveMethod] ;
             }
 
-            target.Interfaces.Add (new InterfaceImplementation (GetType (type))) ;
+            target.Interfaces.Add (new InterfaceImplementation (GetType (mapping.InterfaceType))) ;
         }
 
         /// <inherit/>

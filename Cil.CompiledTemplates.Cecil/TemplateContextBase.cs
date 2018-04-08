@@ -529,6 +529,33 @@ namespace Cil.CompiledTemplates.Cecil
         #endregion
 
         #region --[Methods: Protected]------------------------------------
+        protected InterfaceMapping GetTemplateInterfaceMap (Type template, Type type)
+        {
+            var mapped  = default (Type) ;
+            var ifaces  = template.GetInterfaces () ;
+            if (ifaces != null && Array.IndexOf (ifaces, type) >= 0)
+            {
+                mapped  = type ;
+            }
+            else
+            foreach (var iface in ifaces)
+            {
+                // this clause attempts to deal with implemented generic interfaces
+                // that depend on the template's quasi-generic parameters
+                // the attributes on the template type cannot reference its generic
+                // parameters, so they should use the templated types bound to the
+                // quasi-generic parameters
+                if (iface.IsGenericInstance        () && type.IsGenericTypeDefinition &&
+                    iface.GetGenericTypeDefinition () == type)
+                {
+                    mapped = iface ;
+                    break ;
+                }
+            }
+
+            return template.GetInterfaceMap (mapped) ;
+        }
+
         protected MethodBase GetMethodInType (MethodBase method, Type source, int? retainParameters = null)
         {
             if ((source == null || source == method.DeclaringType) && retainParameters == null)
