@@ -72,6 +72,17 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <summary>
+        /// A call to this method is converted to instructions
+        /// creating a new <typeparamref name="T"/> using a constructor
+        /// with the signature that *exactly* matches the generic type
+        /// arguments of this method.
+        /// </summary>
+        public static T New<T, P1> (P1 p1)
+        {
+            throw new InvalidProgramException () ;
+        }
+
+        /// <summary>
         /// Valid usage patterns: <c>this.CtorCall (new ThisType (...))</c>
         /// and <c>this.CtorCall (new BaseType (...))</c>. A call to this
         /// method with <paramref name="other"/> being an object creation

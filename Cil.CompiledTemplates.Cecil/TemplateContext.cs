@@ -1407,6 +1407,20 @@ namespace Cil.CompiledTemplates.Cecil
                                 continue ;
                             }
 
+                            if (meth.Name == nameof (TemplateHelpers.New))
+                            {
+                                var ctor = new MethodReference (".ctor", m_tVoid, GetType (meth.GetReturnType ())) ;
+                                var argz = meth.GetGenericArguments () ;
+
+                                for (var i = 1 ; i < argz.Length ; ++i)
+                                    ctor.Parameters.Add (new ParameterDefinition (GetType (argz[i]))) ;
+
+                                newinsn.OpCode  = OpCodes.Newobj ;
+                                newinsn.Operand = ctor ;
+                                ctor.HasThis    = true ;
+                                continue ;
+                            }
+
                             if (meth.Name == nameof (TemplateHelpers.Return))
                             {
                                 newinsn.OpCode  = OpCodes.Ret ;
