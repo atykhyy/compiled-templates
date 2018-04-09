@@ -36,6 +36,7 @@ namespace Cil.CompiledTemplates.Cecil
         private readonly TypeReference      m_tObject  ;
         private readonly TypeReference      m_tIntPtr  ;
         private readonly TypeReference      m_tString  ;
+        private readonly TypeReference      m_tValueType ;
 
         private readonly Dictionary<MC.MethodBody, ILBranchManager> m_splices = new Dictionary<MC.MethodBody, ILBranchManager> () ;
         private readonly Dictionary<MC.MethodBody, Scope>           m_scopes  = new Dictionary<MC.MethodBody, Scope> () ;
@@ -75,11 +76,12 @@ namespace Cil.CompiledTemplates.Cecil
                 throw new NotSupportedException () ;
             }
 
-            m_target   = target ;
-            m_tVoid    = target.Module.ImportReference (typeof (void))   ;
-            m_tObject  = target.Module.ImportReference (typeof (object)) ;
-            m_tIntPtr  = target.Module.ImportReference (typeof (IntPtr)) ;
-            m_tString  = target.Module.ImportReference (typeof (String)) ;
+            m_target     = target ;
+            m_tVoid      = target.Module.ImportReference (typeof (void))   ;
+            m_tObject    = target.Module.ImportReference (typeof (object)) ;
+            m_tIntPtr    = target.Module.ImportReference (typeof (IntPtr)) ;
+            m_tString    = target.Module.ImportReference (typeof (String)) ;
+            m_tValueType = target.Module.ImportReference (typeof (ValueType)) ;
 
             m_dictionary = m_dictionary.Add (m_template, m_target) ;
 
@@ -634,7 +636,21 @@ namespace Cil.CompiledTemplates.Cecil
                 if (targetParameters.Count <= p)
                     throw new InvalidOperationException () ; // not enough parameters in target method to match splice's non-templated parameters
 
-                if(!targetParameters[p].ParameterType.SameAs (GetType (parameters[p].ParameterType)))
+                var spt = parameters[p].ParameterType ;
+                var tpt = targetParameters[p].ParameterType ;
+
+                // allow matching struct& `this` in target to a by-value
+                // reference parameter in source as a kludge until I work out
+                // how to support this properly
+                // verifiable usage of `this` in structs is quite restricted,
+                // and for member access it's identical to a reference-type's
+                // `this`, so after matching parameters like this emitted code
+                // does the right thing in simple cases
+                if (p  == 0 && il.Body.Method.HasThis &&
+                    tpt.IsByReference && tpt.GetElementType ().IsValueType && !spt.HasElementType && spt.IsClass)
+                    tpt = tpt.GetElementType () ;
+
+                if(!tpt.SameAs (GetType (spt)))
                     throw new InvalidOperationException () ; // splice's non-templated parameter type does not match target method parameter type
 
                 dictionary.Add (parameters[p], targetParameters[p]) ;
@@ -1399,7 +1415,20 @@ namespace Cil.CompiledTemplates.Cecil
                             }
                         }
 
-                        newinsn.Operand = ImportMethod (meth) ;
+                        // TODO: support copying reference-type templates to value-type targets
+                        var importedMethod = ImportMethod (meth) ;
+                        if (importedMethod.Name == ".ctor" &&
+                            importedMethod.DeclaringType.SameAs (m_tValueType))
+                        {
+                            newinsn.Previous.OpCode  = OpCodes.Nop ;
+                            newinsn.Previous.Operand = null ;
+
+                            newinsn.OpCode  = OpCodes.Nop ;
+                            newinsn.Operand = null ;
+                            continue ;
+                        }
+
+                        newinsn.Operand = importedMethod ;
                     }
                     else
                     if ((field = newinsn.Operand as FieldInfo) != null)
