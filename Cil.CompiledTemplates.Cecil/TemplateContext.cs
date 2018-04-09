@@ -1067,6 +1067,9 @@ namespace Cil.CompiledTemplates.Cecil
             else
                 args = paramz ;
 
+            // current interface for generated constrained. prefix
+            TypeReference constrain = null ;
+
             for (var offset = 0 ; offset < bytes.Length ; )
             {
                 // remember instruction offset for branches etc.
@@ -1222,6 +1225,13 @@ namespace Cil.CompiledTemplates.Cecil
                 // at this point, newinsn.Operand is an "interesting" object:
                 // MemberInfo, ParameterInfo or s_this, and is not null
 
+                // TODO: flow `constrain` along the execution flow
+                if (constrain != null && newinsn.OpCode.Code == Code.Callvirt)
+                {
+                    il.InsertBefore (newinsn, Instruction.Create (OpCodes.Constrained, constrain)) ;
+                    constrain  = null ;
+                }
+
                 // process template bindings
                 object newop ;
                 if (dictionary.TryGetValue (newinsn.Operand, out newop) ||
@@ -1374,6 +1384,15 @@ namespace Cil.CompiledTemplates.Cecil
                                     il.Emit (OpCodes.Ldc_I4_0) ;
                                     continue ;
                                 }
+
+                                if (meth.Name == nameof (TemplateHelpers.Constrain))
+                                {
+                                    newinsn.OpCode  = OpCodes.Nop ;
+                                    newinsn.Operand = null ;
+
+                                    constrain = GetType (meth.GetGenericArguments ()[0]) ;
+                                    continue ;
+                                }
                             }
                             else
                             {
@@ -1469,6 +1488,9 @@ namespace Cil.CompiledTemplates.Cecil
                         throw new InvalidOperationException () ;
                 }
             }
+
+            if (constrain != null)
+                throw new InvalidOperationException () ;
 
             foreach (var eh in from.ExceptionHandlingClauses)
             {

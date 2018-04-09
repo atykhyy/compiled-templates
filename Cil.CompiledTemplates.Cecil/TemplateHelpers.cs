@@ -83,6 +83,18 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <summary>
+        /// A call to this method is converted to a `constrained.`
+        /// instruction prefix. This method can be used to avoid boxing
+        /// when calling interface methods on a value type.
+        /// </summary>
+        public static I Constrain<T, I> (ref T self)
+            where I : class
+            where T : struct, I
+        {
+            throw new InvalidProgramException () ;
+        }
+
+        /// <summary>
         /// Valid usage patterns: <c>this.CtorCall (new ThisType (...))</c>
         /// and <c>this.CtorCall (new BaseType (...))</c>. A call to this
         /// method with <paramref name="other"/> being an object creation
