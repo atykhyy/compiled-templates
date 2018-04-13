@@ -1385,6 +1385,20 @@ namespace Cil.CompiledTemplates.Cecil
                                     continue ;
                                 }
 
+                                if (meth.Name == nameof (TemplateHelpers.FromObject))
+                                {
+                                    newinsn.OpCode  = OpCodes.Unbox_Any ;
+                                    newinsn.Operand = GetType (meth.GetGenericArguments ()[0]) ;
+                                    continue ;
+                                }
+
+                                if (meth.Name == nameof (TemplateHelpers.ToObject))
+                                {
+                                    newinsn.OpCode  = OpCodes.Box ;
+                                    newinsn.Operand = GetType (meth.GetGenericArguments ()[0]) ;
+                                    continue ;
+                                }
+
                                 if (meth.Name == nameof (TemplateHelpers.Constrain))
                                 {
                                     newinsn.OpCode  = OpCodes.Nop ;
@@ -1409,6 +1423,20 @@ namespace Cil.CompiledTemplates.Cecil
                                 if (meth.Name == nameof (TemplateHelpers.Null))
                                 {
                                     newinsn.OpCode  = OpCodes.Ldnull ;
+                                    newinsn.Operand = null ;
+                                    continue ;
+                                }
+
+                                if (meth.Name == nameof (TemplateHelpers.FromObject))
+                                {
+                                    newinsn.OpCode  = OpCodes.Castclass ;
+                                    newinsn.Operand = GetType (meth.GetGenericArguments ()[0]) ;
+                                    continue ;
+                                }
+
+                                if (meth.Name == nameof (TemplateHelpers.ToObject))
+                                {
+                                    newinsn.OpCode  = OpCodes.Nop ;
                                     newinsn.Operand = null ;
                                     continue ;
                                 }

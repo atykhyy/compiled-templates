@@ -83,6 +83,36 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <summary>
+        /// A call to this method is converted to instructions
+        /// casting <paramref name="value"/> to <c>object</c>,
+        /// boxing it if <typeparamref name="T"/> is a value type.
+        /// </summary>
+        /// <remarks>
+        /// This method helps to avoid needless duplication of templated types
+        /// when it is not known beforehand whether the bound type
+        /// is a value or a reference type.
+        /// </remarks>
+        public static object ToObject<T> (this T value)
+        {
+            return value ;
+        }
+
+        /// <summary>
+        /// A call to this method is converted to instructions
+        /// casting <c>object</c> to <paramref name="value"/>,
+        /// unboxing it if <typeparamref name="T"/> is a value type.
+        /// </summary>
+        /// <remarks>
+        /// This method helps to avoid needless duplication of templated types
+        /// when it is not known beforehand whether the bound type
+        /// is a value or a reference type.
+        /// </remarks>
+        public static T FromObject<T> (object value)
+        {
+            return (T) value ;
+        }
+
+        /// <summary>
         /// A call to this method is converted to a `constrained.`
         /// instruction prefix. This method can be used to avoid boxing
         /// when calling interface methods on a value type.
