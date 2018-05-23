@@ -72,6 +72,20 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <summary>
+        /// A call to this method is converted to a default value of <c>T</c>
+        /// in emitted code, regardless of the template type of <c>T</c>.
+        /// </summary>
+        /// <remarks>
+        /// This method helps to avoid needless duplication of templated types
+        /// when it is not known beforehand whether the bound type
+        /// is a value or a reference type.
+        /// </remarks>
+        public static T Default<T> ()
+        {
+            throw new InvalidProgramException () ;
+        }
+
+        /// <summary>
         /// A call to this method is converted to instructions
         /// creating a new <typeparamref name="T"/> using a constructor
         /// with the signature that *exactly* matches the generic type

@@ -1385,6 +1385,18 @@ namespace Cil.CompiledTemplates.Cecil
                                     continue ;
                                 }
 
+                                if (meth.Name == nameof (TemplateHelpers.Default))
+                                {
+                                    var dummy = il.CreateLocal (GetType (meth.GetGenericArguments ()[0])) ;
+
+                                    newinsn.OpCode  = OpCodes.Ldloca ;
+                                    newinsn.Operand = dummy ;
+
+                                    il.Emit (OpCodes.Initobj, dummy.VariableType) ;
+                                    il.Emit (OpCodes.Ldloc,   dummy) ;
+                                    continue ;
+                                }
+
                                 if (meth.Name == nameof (TemplateHelpers.FromObject))
                                 {
                                     newinsn.OpCode  = OpCodes.Unbox_Any ;
@@ -1420,7 +1432,8 @@ namespace Cil.CompiledTemplates.Cecil
                                     continue ;
                                 }
 
-                                if (meth.Name == nameof (TemplateHelpers.Null))
+                                if (meth.Name == nameof (TemplateHelpers.Null) ||
+                                    meth.Name == nameof (TemplateHelpers.Default))
                                 {
                                     newinsn.OpCode  = OpCodes.Ldnull ;
                                     newinsn.Operand = null ;
