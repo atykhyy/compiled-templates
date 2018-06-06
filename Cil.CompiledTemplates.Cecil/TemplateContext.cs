@@ -722,8 +722,7 @@ namespace Cil.CompiledTemplates.Cecil
                 insnRight = null ;
                 insnLeft  = location.Insn ;
 
-                insnLeft.OpCode  = OpCodes.Nop ;
-                insnLeft.Operand = null ;
+                insnLeft.NopOut () ;
                 break ;
 
             case SpliceRelation.AfterAsPart:
@@ -878,8 +877,7 @@ namespace Cil.CompiledTemplates.Cecil
                                 dictionary.Add (pars[i], insnRight.Clone ()) ;
 
                                 // can't use RemoveAt (see note above)
-                                insnRight.OpCode  = OpCodes.Nop ;
-                                insnRight.Operand = null ;
+                                insnRight.NopOut () ;
                                 continue ;
                             }
 
@@ -1413,8 +1411,7 @@ namespace Cil.CompiledTemplates.Cecil
 
                                 if (meth.Name == nameof (TemplateHelpers.Constrain))
                                 {
-                                    newinsn.OpCode  = OpCodes.Nop ;
-                                    newinsn.Operand = null ;
+                                    newinsn.NopOut () ;
 
                                     constrain = GetType (meth.GetGenericArguments ()[0]) ;
                                     continue ;
@@ -1449,8 +1446,7 @@ namespace Cil.CompiledTemplates.Cecil
 
                                 if (meth.Name == nameof (TemplateHelpers.ToObject))
                                 {
-                                    newinsn.OpCode  = OpCodes.Nop ;
-                                    newinsn.Operand = null ;
+                                    newinsn.NopOut () ;
                                     continue ;
                                 }
                             }
@@ -1461,9 +1457,7 @@ namespace Cil.CompiledTemplates.Cecil
                                     throw new InvalidOperationException () ;
 
                                 newinsn.Previous.OpCode = OpCodes.Call ;
-
-                                newinsn.OpCode  = OpCodes.Nop ;
-                                newinsn.Operand = null ;
+                                newinsn.NopOut () ;
                                 continue ;
                             }
 
@@ -1494,11 +1488,8 @@ namespace Cil.CompiledTemplates.Cecil
                         if (importedMethod.Name == ".ctor" &&
                             importedMethod.DeclaringType.SameAs (m_tValueType))
                         {
-                            newinsn.Previous.OpCode  = OpCodes.Nop ;
-                            newinsn.Previous.Operand = null ;
-
-                            newinsn.OpCode  = OpCodes.Nop ;
-                            newinsn.Operand = null ;
+                            newinsn.Previous.NopOut () ;
+                            newinsn.NopOut          () ;
                             continue ;
                         }
 

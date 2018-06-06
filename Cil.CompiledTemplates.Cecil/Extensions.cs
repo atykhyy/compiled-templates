@@ -594,6 +594,21 @@ namespace Cil.CompiledTemplates.Cecil
             newinsn.Operand = insn.Operand ;
             return newinsn ;
         }
+
+        /// <summary>
+        /// Nops out <paramref name="insn"/>.
+        /// </summary>
+        /// <remarks>
+        /// It is often a bad idea to remove instructions with RemoveAt
+        /// because it removes sequence points, breaks the linked list,
+        /// potentially making variable scope ranges unusable, and creates
+        /// weird corner cases with entirely empty methods.
+        /// </remarks>
+        public static void NopOut (this Instruction insn)
+        {
+            insn.OpCode  = OpCodes.Nop ;
+            insn.Operand = null ;
+        }
         #endregion
     }
 
