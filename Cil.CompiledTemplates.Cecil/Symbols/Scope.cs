@@ -43,6 +43,7 @@ namespace Cil.CompiledTemplates.Cecil
             m_end   = scope.End.IsEndOfMethod ? null : insns[scope.End.Offset]   ;
 
             m_variables = new List<VariableDebugInformation> (scope.Variables) ;
+            m_constants = new List<ConstantDebugInformation> (scope.Constants) ;
 
             foreach (var s in scope.Scopes)
             {
