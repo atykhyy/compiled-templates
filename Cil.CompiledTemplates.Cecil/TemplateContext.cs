@@ -266,7 +266,7 @@ namespace Cil.CompiledTemplates.Cecil
                 body.OptimizeMacros () ;
 
             foreach (var kv in m_scopes)
-                kv.Key.Method.DebugInformation.Scope = kv.Value.ToCecil () ;
+                kv.Key.Method.DebugInformation.Scope = kv.Value.ToCecil (kv.Key) ;
         }
 
         /// <inherit/>
@@ -1019,7 +1019,7 @@ namespace Cil.CompiledTemplates.Cecil
 
             var scope  = CopyMethodBody (from, fromBody, to.Body.GetILProcessor (), null, dictionary) ;
             if (scope != null)
-                to.DebugInformation.Scope = scope.ToCecil () ;
+                to.DebugInformation.Scope = scope.ToCecil (to.Body) ;
 
             to.Body.OptimizeMacros () ;
             return to ;

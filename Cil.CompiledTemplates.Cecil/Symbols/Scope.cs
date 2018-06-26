@@ -87,13 +87,13 @@ namespace Cil.CompiledTemplates.Cecil
             m_constants.Add (new ConstantDebugInformation (name, type, value)) ;
         }
 
-        public ScopeDebugInformation ToCecil ()
+        public ScopeDebugInformation ToCecil (MethodBody body)
         {
-            var result = new ScopeDebugInformation (m_start, m_end) ;
+            var result = new ScopeDebugInformation (m_start ?? body.Instructions.First (), m_end) ;
 
             if (m_scopes != null)
                 foreach (var s in m_scopes)
-                    result.Scopes.Add (s.ToCecil ()) ;
+                    result.Scopes.Add (s.ToCecil (body)) ;
 
             if (m_variables != null)
                 foreach (var v in m_variables)
