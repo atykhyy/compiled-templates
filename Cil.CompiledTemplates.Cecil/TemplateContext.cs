@@ -1634,23 +1634,24 @@ namespace Cil.CompiledTemplates.Cecil
             for (var i = 0 ; i < types.Length ; ++i)
             {
                 var typevar = types[i] ;
-                if (typevar.IsGenericParameter)
-                {
-                    var bound  = GetType (typevar, throwIfNotBound: false) ;
-                    if (bound == null || bound.IsGenericParameter)
-                        continue ;
+                var bound   = GetType (typevar, throwIfNotBound: false) ;
+                if (bound  == null || bound.IsGenericParameter)
+                    continue ;
 
-                    scope.AddConstant (typevar.Name, m_tString, bound.ToString ()) ;
-                }
-                else
+                string name ;
+                if (!typevar.IsGenericParameter)
                 {
                     if (parameters == null)
                         parameters  = context.MemberType == MemberTypes.Method
                             ? ((MethodInfo) context).GetGenericMethodDefinition ().GetGenericArguments ()
                             : ((Type)       context).GetGenericTypeDefinition   ().GetGenericArguments () ;
 
-                    scope.AddConstant (parameters[i].Name, m_tString, GetType (typevar).ToString ()) ;
+                    name = parameters[i].Name ;
                 }
+                else
+                    name = typevar.Name ;
+
+                scope.AddConstant (name, m_tString, bound.ToString ()) ;
             }
         }
 
