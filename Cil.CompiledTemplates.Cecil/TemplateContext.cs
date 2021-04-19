@@ -1500,7 +1500,7 @@ namespace Cil.CompiledTemplates.Cecil
                     {
                         if (field.DeclaringType.DeclaringType == typeof (TemplateHelpers))
                         {
-                            if (field.DeclaringType.Name.StartsWith (nameof (TemplateHelpers.RefThis<int>)))
+                            if (field.DeclaringType.Name.StartsWith (nameof (TemplateHelpers.RefThis<int>), StringComparison.Ordinal))
                             {
                                 if (il.Body.Method.IsStatic ||
                                    !il.Body.Method.DeclaringType.IsValueType)
