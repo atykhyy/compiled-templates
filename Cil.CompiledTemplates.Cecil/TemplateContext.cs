@@ -1411,7 +1411,29 @@ namespace Cil.CompiledTemplates.Cecil
 
                                 if (meth.Name == nameof (TemplateHelpers.Constrain))
                                 {
-                                    newinsn.NopOut () ;
+                                    switch (newinsn.Previous.OpCode.Code)
+                                    {
+                                    case Code.Ldnull:
+                                    case Code.Ldarg:
+                                    case Code.Ldarg_0:
+                                    case Code.Ldarg_1:
+                                    case Code.Ldarg_2:
+                                    case Code.Ldarg_3:
+                                    case Code.Ldarg_S:
+                                    case Code.Ldloc:
+                                    case Code.Ldloc_0:
+                                    case Code.Ldloc_1:
+                                    case Code.Ldloc_2:
+                                    case Code.Ldloc_3:
+                                    case Code.Ldloc_S:
+                                        newinsn.Previous.NopOut () ;
+                                        newinsn.NopOut          () ;
+                                        break ;
+                                    default:
+                                        newinsn.OpCode  = OpCodes.Pop ;
+                                        newinsn.Operand = null ;
+                                        break ;
+                                    }
 
                                     constrain = GetType (meth.GetGenericArguments ()[0]) ;
                                     continue ;

@@ -131,7 +131,7 @@ namespace Cil.CompiledTemplates.Cecil
         /// instruction prefix. This method can be used to avoid boxing
         /// when calling interface methods on a value type.
         /// </summary>
-        public static I Constrain<T, I> (ref T self)
+        public static I Constrain<T, I> (this ref T self, I dummy = null)
             where I : class
             where T : struct, I
         {
