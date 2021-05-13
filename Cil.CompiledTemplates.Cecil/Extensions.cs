@@ -456,14 +456,21 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <summary>
-        /// Returns a new nop instruction inserted just after the call
-        /// to the base type constructor.
+        /// Returns the instruction that calls the base type or self constructor.
         /// </summary>
-        public static Instruction SkipToAfterBaseCtorInvocation (this ILProcessor il, Instruction i0)
+        /// <remarks>
+        /// Verifiable code can only call a constructor with a <see cref="Code.Call"/>
+        /// instruction if it is the base type or self instance constructor being
+        /// invoked from an instance constructor, or if it is initializing a value
+        /// type location. Verifiable reference type instance constructors must
+        /// invoke a self or base type constructor (ECMA-335 I.8.9.6.6 and III.3.19).
+        /// </remarks>
+        public static Instruction FindThisOrBaseCtorInvocation (this MethodDefinition ctor)
         {
-            // skip to base constructor invocation
-            // other code will be inserted just after it
-            for (var i1 = i0 ; ; i1 = i1.Next)
+            if (ctor.DeclaringType.IsValueType)
+                throw new ArgumentException () ;
+
+            for (var i1 = ctor.Body.Instructions[0] ; i1 != null ; i1 = i1.Next)
             {
                 if (i1.OpCode.Code != Code.Call)
                     continue ;
@@ -471,19 +478,18 @@ namespace Cil.CompiledTemplates.Cecil
                 var method = (MethodReference) i1.Operand ;
                 if (method.HasThis         &&
                     method.Name == ".ctor" &&
-                    method.IsVoidReturn ())
+                    method.IsVoidReturn () &&
+                   !method.DeclaringType.IsValueType)
                 {
-                    for (var t = il.Body.Method.DeclaringType.BaseType ; t != null ; t = t.Resolve ().BaseType)
-                    {
-                        if (method.DeclaringType.SameAs (t))
-                        {
-                            i0 = il.Create (OpCodes.Nop) ;
-                            il.InsertAfter (i1, i0) ;
-                            return i0 ;
-                        }
-                    }
+                    // technically I should resolve the method
+                    // and check for SpecialName and RTSpecialName flags,
+                    // but it might not be resolvable at this point
+                    return i1 ;
                 }
             }
+
+            // should never occur in verifiable code
+            throw new InvalidProgramException () ;
         }
 
         /// <summary>
