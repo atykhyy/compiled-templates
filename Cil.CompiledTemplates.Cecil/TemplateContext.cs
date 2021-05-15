@@ -1748,7 +1748,7 @@ namespace Cil.CompiledTemplates.Cecil
                     ReadingMode          = ReadingMode.Deferred,
                     AssemblyResolver     = null,
                     SymbolReaderProvider = new DefaultSymbolReaderProvider (false),
-                })).SymbolReader.Read (new MethodDefinition (null, 0, new TypeDefinition (null, null, 0))
+                })).SymbolReader?.Read (new MethodDefinition (null, 0, new TypeDefinition (null, null, 0))
                 {
                     MetadataToken = new MetadataToken ((uint) method.MetadataToken),
                 }) ;
