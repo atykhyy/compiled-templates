@@ -615,6 +615,21 @@ namespace Cil.CompiledTemplates.Cecil
             insn.OpCode  = OpCodes.Nop ;
             insn.Operand = null ;
         }
+
+        /// <summary>
+        /// Creates a copy of sequence point <paramref name="sp"/>
+        /// pointing to <paramref name="insn"/>.
+        /// </summary>
+        public static SequencePoint WithInstruction (this SequencePoint sp, Instruction insn)
+        {
+            return new SequencePoint (insn, sp.Document)
+            {
+                StartLine   = sp.StartLine,
+                StartColumn = sp.StartColumn,
+                EndLine     = sp.EndLine,
+                EndColumn   = sp.EndColumn,
+            } ;
+        }
         #endregion
     }
 

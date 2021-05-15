@@ -28,7 +28,7 @@ namespace Cil.CompiledTemplates.Cecil
     /// <summary>
     /// Represents a single template application to a single target type.
     /// </summary>
-    public sealed class TemplateContext : TemplateContextBase
+    public sealed partial class TemplateContext : TemplateContextBase
     {
         #region --[Fields: Private]---------------------------------------
         private readonly TypeDefinition     m_target   ;
@@ -39,12 +39,17 @@ namespace Cil.CompiledTemplates.Cecil
         private readonly TypeReference      m_tValueType ;
 
         private readonly Dictionary<MC.MethodBody, ILBranchManager> m_splices = new Dictionary<MC.MethodBody, ILBranchManager> () ;
-        private readonly Dictionary<MC.MethodBody, Scope>           m_scopes  = new Dictionary<MC.MethodBody, Scope> () ;
 
         private readonly static MethodReference NullMethod = new MethodReference (null, new TypeReference (null, null, null, null)) ;
 
         private readonly static OpCode[] OneByteOpCode  = (OpCode[]) typeof (OpCodes).GetField (nameof (OneByteOpCode),  BindingFlags.Static | BindingFlags.NonPublic).GetValue (null) ;
         private readonly static OpCode[] TwoBytesOpCode = (OpCode[]) typeof (OpCodes).GetField (nameof (TwoBytesOpCode), BindingFlags.Static | BindingFlags.NonPublic).GetValue (null) ;
+
+        // since I'm working with Assemblies, and the lifetime of Assembly objects
+        // is coterminous with the lifetime of the AppDomain they are loaded into,
+        // there seems to be no harm in having symbol reader instances live as long
+        private static System.Collections.Immutable.ImmutableDictionary<Module, ModuleDefinition> s_symbols =
+                       System.Collections.Immutable.ImmutableDictionary<Module, ModuleDefinition>.Empty ;
         #endregion
 
         /// <summary>
@@ -263,10 +268,28 @@ namespace Cil.CompiledTemplates.Cecil
         public void Commit ()
         {
             foreach (var body in m_splices.Keys)
+            {
+                // NB: this method computes instruction offsets
                 body.OptimizeMacros () ;
 
-            foreach (var kv in m_scopes)
-                kv.Key.Method.DebugInformation.Scope = kv.Value.ToCecil (kv.Key) ;
+                // sort sequence points by offset,
+                // otherwise Cecil will silently write a corrupt portable PDB
+                var mdi = body.Method.DebugInformation ;
+                if (mdi.HasSequencePoints)
+                {
+                    var spc = mdi.SequencePoints ;
+                    for (var i = 1 ; i < spc.Count ; ++i)
+                        if (spc[i - 1].Offset >= spc[i].Offset)
+                        {
+                            var spa = new SequencePoint[spc.Count] ;
+                            spc.CopyTo (spa, 0) ;
+                            Array.Sort (spa, (a, b) => a.Offset.CompareTo (b.Offset)) ;
+                            for (i = 0 ; i < spa.Length ; ++i)
+                                spc[i] = spa[i] ;
+                            break ;
+                        }
+                }
+            }
         }
 
         /// <inherit/>
@@ -731,10 +754,6 @@ namespace Cil.CompiledTemplates.Cecil
                 break ;
             }
 
-            // NB: an intermediate scope structure is necessary
-            // because ScopeDebugInformation does not expose Instruction references
-            var rootScope = PrepareVariableScopes (il.Body) ;
-
             // prepare to splice at indicated location
             // prepare instruction to branch to instead of normal splice returns
             Instruction[] insnSaved ;
@@ -921,7 +940,7 @@ namespace Cil.CompiledTemplates.Cecil
             // splice variable scopes
             // NB: spliceScope always has both Start and End non-null
             if (spliceScope != null)
-                rootScope.Splice (spliceScope, location) ;
+                SpliceScope (il.Body, spliceScope, location) ;
         }
 
         private Tuple<MethodDefinition, MethodBase, MethodBase, Dictionary<object, object>> CreateMethodBuilder (
@@ -1017,15 +1036,12 @@ namespace Cil.CompiledTemplates.Cecil
             // this relieves the user from having to track abstractness in some cases
             to.Attributes &= ~Mono.Cecil.MethodAttributes.Abstract ;
 
-            var scope  = CopyMethodBody (from, fromBody, to.Body.GetILProcessor (), null, dictionary) ;
-            if (scope != null)
-                to.DebugInformation.Scope = scope.ToCecil (to.Body) ;
-
+            to.DebugInformation.Scope = CopyMethodBody (from, fromBody, to.Body.GetILProcessor (), null, dictionary) ;
             to.Body.OptimizeMacros () ;
             return to ;
         }
 
-        private Scope CopyMethodBody (MethodBase method, System.Reflection.MethodBody from, ILProcessor il, Instruction ret,
+        private ScopeDebugInformation CopyMethodBody (MethodBase method, System.Reflection.MethodBody from, ILProcessor il, Instruction ret,
             Dictionary<object, object> dictionary)
         {
             var insns  = new Dictionary<int, Instruction> () ;
@@ -1566,38 +1582,14 @@ namespace Cil.CompiledTemplates.Cecil
                 return null ;
 
             // copy sequence points
-            var dinfo   = il.Body.Method.DebugInformation  ;
-            var spoints = methodSymbols.SequencePointCount ;
-            var offsets = new int[spoints] ;
-            var slines  = new int[spoints] ;
-            var elines  = new int[spoints] ;
-            var scols   = new int[spoints] ;
-            var ecols   = new int[spoints] ;
-            var symdocs = new System.Diagnostics.SymbolStore.ISymbolDocument[spoints] ;
-            methodSymbols.GetSequencePoints (offsets, symdocs, slines, scols, elines, ecols) ;
+            // TODO: copy source links if any
+            var dinfo = il.Body.Method.DebugInformation ;
 
-            for (int i  = 0 ; i < spoints ; ++i)
-            {
-                var sd = new Document (symdocs[i].URL) ;
-
-                // TODO: not implemented in unmanaged symbol reader
-                //sd.Hash           = symdocs[i].GetCheckSum () ;
-                //sd.HashAlgorithm  = PdbGuidMapping.ToHashAlgorithm (symdocs[i].CheckSumAlgorithmId) ;
-                sd.LanguageVendor = PdbGuidMapping.ToVendor        (symdocs[i].LanguageVendor) ;
-                sd.Language       = PdbGuidMapping.ToLanguage      (symdocs[i].Language) ;
-                sd.Type           = PdbGuidMapping.ToType          (symdocs[i].DocumentType) ;
-
-                var sp = new SequencePoint (insns[offsets[i]], sd) ;
-                dinfo.SequencePoints.Add   (sp) ;
-
-                sp.StartLine   = slines[i] ;
-                sp.EndLine     = elines[i] ;
-                sp.StartColumn = scols[i]  ;
-                sp.EndColumn   = ecols[i]  ;
-            }
+            if (methodSymbols.HasSequencePoints) foreach (var sp in methodSymbols.SequencePoints)
+                dinfo.SequencePoints.Add (sp.WithInstruction (insns[sp.Offset])) ;
 
             // copy local variable scopes
-            var scope = new Scope (methodSymbols.RootScope, localz, insns) ;
+            var scope = CopyScope (methodSymbols.Scope, localz, insns) ;
 
             // add information on current bindings
             // for now, I just add the mappings as constant strings
@@ -1640,7 +1632,7 @@ namespace Cil.CompiledTemplates.Cecil
                         break ;
                     }
 
-                    scope.AddConstant (typevar.Name, type, value) ;
+                    scope.Constants.Add (new ConstantDebugInformation (typevar.Name, type, value)) ;
                 }
             }
 
@@ -1649,7 +1641,7 @@ namespace Cil.CompiledTemplates.Cecil
             return scope ;
         }
 
-        private void AddQuasiGenericParameters (MemberInfo context, Type[] types, Scope scope)
+        private void AddQuasiGenericParameters (MemberInfo context, Type[] types, ScopeDebugInformation scope)
         {
             Type[] parameters = null ;
 
@@ -1673,20 +1665,8 @@ namespace Cil.CompiledTemplates.Cecil
                 else
                     name = typevar.Name ;
 
-                scope.AddConstant (name, m_tString, bound.ToString ()) ;
+                scope.Constants.Add (new ConstantDebugInformation (name, m_tString, bound.ToString ())) ;
             }
-        }
-
-        private Scope PrepareVariableScopes (MC.MethodBody body)
-        {
-            Scope scope ;
-            if (!m_scopes.TryGetValue (body, out scope))
-            {
-                scope = Scope.FromMethodBody (body) ;
-                m_scopes.Add (body, scope) ;
-            }
-
-            return scope ;
         }
 
         private Instruction GetOrAdd (Dictionary<int, Instruction> insns, int offset)
@@ -1758,6 +1738,20 @@ namespace Cil.CompiledTemplates.Cecil
 
                     to.CustomAttributes.Add (newca) ; // TODO: templated items in custom attributes?
                 }
+        }
+
+        private MethodDebugInformation GetMethodSymbols (MethodBase method)
+        {
+            return System.Collections.Immutable.ImmutableInterlocked.GetOrAdd (ref s_symbols, method.Module,
+                module => ModuleDefinition.ReadModule (module.Assembly.Location, new ReaderParameters
+                {
+                    ReadingMode          = ReadingMode.Deferred,
+                    AssemblyResolver     = null,
+                    SymbolReaderProvider = new DefaultSymbolReaderProvider (false),
+                })).SymbolReader.Read (new MethodDefinition (null, 0, new TypeDefinition (null, null, 0))
+                {
+                    MetadataToken = new MetadataToken ((uint) method.MetadataToken),
+                }) ;
         }
         #endregion
 

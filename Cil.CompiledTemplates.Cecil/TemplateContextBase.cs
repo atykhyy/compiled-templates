@@ -15,8 +15,6 @@ using System.Linq.Expressions ;
 using System.Collections.Generic   ;
 using System.Collections.Immutable ;
 using System.Reflection  ;
-
-using SDS = System.Diagnostics.SymbolStore ;
 #endregion
 
 namespace Cil.CompiledTemplates.Cecil
@@ -56,12 +54,6 @@ namespace Cil.CompiledTemplates.Cecil
                 m_context.m_dictionary = m_state ;
             }
         }
-
-        // since I'm working with Assemblies, and the lifetime of Assembly objects
-        // is coterminous with the lifetime of the AppDomain they are loaded into,
-        // there seems to be no harm in having symbol reader instances live as long
-        private static ImmutableDictionary<Assembly, SDS.ISymbolReader> s_symbolReaders =
-                       ImmutableDictionary<Assembly, SDS.ISymbolReader>.Empty ;
         #endregion
 
         #region --[Constructors]------------------------------------------
@@ -638,20 +630,6 @@ namespace Cil.CompiledTemplates.Cecil
                 return String.Format (ca.Name, m_dictionary.GetValueOrDefault (s_scope)) ;
 
             return member.Name ;
-        }
-
-        [System.Diagnostics.DebuggerNonUserCode]
-        protected SDS.ISymbolMethod GetMethodSymbols (MethodBase method)
-        {
-            try
-            {
-                return ImmutableInterlocked.GetOrAdd (ref s_symbolReaders, method.Module.Assembly,
-                    _ => SymbolHelpers.GetSymbolReader (_.Location)).GetMethod (new SDS.SymbolToken (method.MetadataToken)) ;
-            }
-            catch
-            {
-                return null ;
-            }
         }
         #endregion
     }

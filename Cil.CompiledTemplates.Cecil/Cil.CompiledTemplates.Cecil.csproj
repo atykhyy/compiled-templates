@@ -21,11 +21,9 @@
     <Compile Include="Attributes.cs" />
     <Compile Include="Extensions.cs" />
     <Compile Include="ILBranchManager.cs" />
-    <Compile Include="Symbols\PdbGuids.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Scope.cs" />
     <Compile Include="SpliceLocation.cs" />
-    <Compile Include="Symbols\Scope.cs" />
-    <Compile Include="Symbols\Symbols.cs" />
     <Compile Include="TemplateContext.cs" />
     <Compile Include="TemplateContextBase.cs" />
     <Compile Include="TemplateHelpers.cs" />
