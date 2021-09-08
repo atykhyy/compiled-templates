@@ -138,6 +138,36 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <summary>
+        /// Safely sets <see cref="MemberReference.DeclaringType"/>
+        /// on <paramref name="member"/> when <paramref name="reference"/>
+        /// is not guaranteed to not be a <see cref="TypeDefinition"/>.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="TypeDefinition"/> inherits from <see cref="TypeReference"/>,
+        /// but is not a valid value for <see cref="MemberReference.DeclaringType"/>.
+        /// <br/>
+        /// [https://github.com/jbevain/cecil/pull/501#issuecomment-526406897]
+        /// </remarks>
+        public static void SetDeclaringType (this MemberReference member, TypeReference reference)
+        {
+            if (reference is TypeDefinition definition)
+            {
+                if (member.Module != null && member.Module != definition.Module)
+                    throw new ArgumentException () ;
+
+                reference = new TypeReference (definition.Namespace, definition.Name, definition.Module, definition.Scope, definition.IsValueType) ;
+
+                if (definition.IsNested)
+                    reference.SetDeclaringType (definition.DeclaringType) ;
+
+                if (definition.HasGenericParameters) foreach (var p in definition.GenericParameters)
+                    reference.GenericParameters.Add (new GenericParameter (p.Name, reference)) ;
+            }
+
+            member.DeclaringType = reference ;
+        }
+
+        /// <summary>
         /// Imports the field identified by the lambda expression <paramref name="expr"/>.
         /// </summary>
         /// <remarks>
@@ -424,11 +454,12 @@ namespace Cil.CompiledTemplates.Cecil
         {
             var result = new MethodReference (method.Name, method.ReturnType)
             {
-                DeclaringType     = type,
                 HasThis           = method.HasThis,
                 ExplicitThis      = method.ExplicitThis,
                 CallingConvention = method.CallingConvention,
             } ;
+
+            result.SetDeclaringType (type) ;
 
             foreach (var parameter in method.Parameters)
                 result.Parameters.Add (new ParameterDefinition (parameter.ParameterType)) ;

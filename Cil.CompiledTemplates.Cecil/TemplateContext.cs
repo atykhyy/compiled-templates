@@ -1501,7 +1501,7 @@ namespace Cil.CompiledTemplates.Cecil
 
                             if (meth.Name == nameof (TemplateHelpers.New))
                             {
-                                var ctor = new MethodReference (".ctor", m_tVoid, GetType (meth.GetReturnType ())) ;
+                                var ctor = MakeCtorReference (meth.GetReturnType ()) ;
                                 var argz = meth.GetGenericArguments () ;
 
                                 for (var i = 1 ; i < argz.Length ; ++i)
@@ -1509,7 +1509,6 @@ namespace Cil.CompiledTemplates.Cecil
 
                                 newinsn.OpCode  = OpCodes.Newobj ;
                                 newinsn.Operand = ctor ;
-                                ctor.HasThis    = true ;
                                 continue ;
                             }
 
@@ -1680,11 +1679,17 @@ namespace Cil.CompiledTemplates.Cecil
             return insn ;
         }
 
+        private MethodReference MakeCtorReference (Type type)
+        {
+            var ctor     = new MethodReference (".ctor", m_tVoid) ;
+            ctor.HasThis = true ;
+            ctor.SetDeclaringType (GetType (type)) ;
+            return ctor ;
+        }
+
         private MethodReference MakeDelegateCtorReference (Type type)
         {
-            var ctor     = new MethodReference (".ctor", m_tVoid, GetType (type)) ;
-            ctor.HasThis = true ;
-
+            var ctor = MakeCtorReference (type) ;
             ctor.Parameters.Add (new ParameterDefinition (m_tObject)) ;
             ctor.Parameters.Add (new ParameterDefinition (m_tIntPtr)) ;
             return ctor ;
@@ -1823,7 +1828,7 @@ namespace Cil.CompiledTemplates.Cecil
                 m_target.Module, moduleReference.Scope, type.IsValueType) ;
 
             if (type.IsNested)
-                reference.DeclaringType = ImportType (type.DeclaringType, context, asOpen) ;
+                reference.SetDeclaringType (ImportType (type.DeclaringType, context, asOpen)) ;
             else
                 reference.Namespace = type.Namespace ?? string.Empty ;
 
@@ -1873,7 +1878,9 @@ namespace Cil.CompiledTemplates.Cecil
             using (context.Push (declaringType))
             {
                 // allow limited "forward declarations"
-                return new FieldReference (GetEmitName (field), ImportType (field.FieldType, context), declaringType) ;
+                var reference = new FieldReference (GetEmitName (field), ImportType (field.FieldType, context)) ;
+                reference.SetDeclaringType (declaringType) ;
+                return reference ;
             }
         }
 
@@ -1915,7 +1922,7 @@ namespace Cil.CompiledTemplates.Cecil
                     refParams.Add (new ParameterDefinition (ImportType (parameters[i].ParameterType, context))) ;
             }
 
-            reference.DeclaringType = declaringType ;
+            reference.SetDeclaringType (declaringType) ;
             return reference ;
         }
 

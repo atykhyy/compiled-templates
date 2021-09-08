@@ -60,47 +60,45 @@ namespace Cil.CompiledTemplates.Cecil
                 target.Start = scope.Start ;
             }
             else
-                InsertScope (target, scope) ;
-        }
-
-        private static bool InsertScope (ScopeDebugInformation target, ScopeDebugInformation scope)
-        {
-            if(!target.HasScopes)
             {
-                target.Scopes.Add (scope) ;
-                return true ;
-            }
+                var stack = default (Stack<(ScopeDebugInformation, int)>) ;
+                var index = 0 ;
 
-            var list = target.Scopes ;
-            var insn = target.Start.Instruction ;
-            var end  = target.End.Instruction   ;
-            var pos  = 0 ;
-
-            while (true)
-            {
-                if (insn == end)
-                    return false ;
-
-                if (insn == null)
-                    throw new InvalidOperationException () ;
-
-                if (insn == scope.Start.Instruction)
+                for (var insn = body.Instructions.FirstOrDefault () ; insn != null ; )
                 {
-                    list.Insert (pos, scope) ;
-                    return true ;
-                }
+                    if(!target.HasScopes)
+                    {
+                        target.Scopes.Add (scope) ;
+                        break ;
+                    }
 
-                if (pos  != list.Count &&
-                    insn == list[pos].Start.Instruction)
-                {
-                    if (InsertScope (list[pos], scope))
-                        return true ;
+                    var o = new InstructionOffset (insn) ;
+                    if (o.Equals (scope.Start))
+                    {
+                        target.Scopes.Insert (index, scope) ;
+                        break ;
+                    }
 
-                    insn  = list[pos].End.Instruction ;
-                    pos  += 1 ;
+                    if (o.Equals (target.End))
+                    {
+                        if (stack == null || stack.Count == 0)
+                            break ;
+
+                        (target, index) = stack.Pop () ;
+                    }
+                    else
+                    if (index  != target.Scopes.Count &&
+                        o.Equals (target.Scopes[index].Start))
+                    {
+                        if (stack == null)
+                            stack  = new Stack<(ScopeDebugInformation, int)> () ;
+
+                        stack.Push ((target, index + 1)) ;
+                        target = target.Scopes[index] ;
+                        index  = 0 ;
+                    }
+                    else insn  = insn.Next ;
                 }
-                else
-                    insn  = insn.Next ;
             }
         }
     }

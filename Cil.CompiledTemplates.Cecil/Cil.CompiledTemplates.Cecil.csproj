@@ -9,9 +9,7 @@
   </PropertyGroup>
   <Import Project="..\SharedBuildProperties.props" />
   <ItemGroup>
-    <!--PackageReference Include="Mono.Cecil" Version="0.10.0" /-->
-    <ProjectReference Include="..\..\elasticbytes\EntityStore\Cecil\Mono.Cecil.csproj" />
-    <ProjectReference Include="..\..\elasticbytes\EntityStore\Cecil\rocks\Mono.Cecil.Rocks.csproj" />
+    <PackageReference Include="Mono.Cecil" Version="0.11.4" />
     <PackageReference Include="System.Collections.Immutable" Version="1.5.0" />
   </ItemGroup>
   <ItemGroup>
