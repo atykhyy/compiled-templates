@@ -1791,9 +1791,6 @@ namespace Cil.CompiledTemplates.Cecil
             if (type.IsGenericType && (!type.IsGenericTypeDefinition || asOpen))
                 return ImportGenericInstance (type, context);
 
-            // invoke module's reflection importer to obtain the correct scope
-            var moduleReference = m_target.Module.ImportReference (type) ;
-
             switch (Type.GetTypeCode (type))
             {
             case TypeCode.Boolean:
@@ -1810,7 +1807,7 @@ namespace Cil.CompiledTemplates.Cecil
             case TypeCode.UInt16:
             case TypeCode.UInt32:
             case TypeCode.UInt64:
-                return moduleReference ;
+                return m_target.Module.ImportReference (type) ;
             }
 
             if (type == typeof (void)      ||
@@ -1820,17 +1817,21 @@ namespace Cil.CompiledTemplates.Cecil
                 type == typeof (UIntPtr)   ||
                 type == typeof (TypedReference))
             {
-                return moduleReference ;
+                return m_target.Module.ImportReference (type) ;
             }
 
             // allow limited "forward declarations"
             var reference = new TypeReference (string.Empty, GetEmitName (type),
-                m_target.Module, moduleReference.Scope, type.IsValueType) ;
+                m_target.Module, null, type.IsValueType) ;
 
             if (type.IsNested)
                 reference.SetDeclaringType (ImportType (type.DeclaringType, context, asOpen)) ;
             else
+            {
+                // invoke module's reflection importer to obtain the correct scope
+                reference.Scope     = m_target.Module.ImportReference (type).Scope ;
                 reference.Namespace = type.Namespace ?? string.Empty ;
+            }
 
             if (type.IsGenericType)
                 ImportGenericParameters (reference, type.GetGenericArguments ()) ;
