@@ -18,7 +18,7 @@ using Mono.Cecil.Cil ;
 
 namespace Cil.CompiledTemplates.Cecil
 {
-    partial class TemplateContext : TemplateContextBase
+    partial class TemplateContext
     {
         private ScopeDebugInformation CopyScope (ScopeDebugInformation source,
             VariableDefinition[] locals, Dictionary<int, Instruction> insns)

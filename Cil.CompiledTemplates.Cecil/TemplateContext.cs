@@ -28,7 +28,7 @@ namespace Cil.CompiledTemplates.Cecil
     /// <summary>
     /// Represents a single template application to a single target type.
     /// </summary>
-    public sealed partial class TemplateContext : TemplateContextBase
+    public sealed partial class TemplateContext : TemplateContextBase<FieldDefinition, MethodDefinition>
     {
         #region --[Fields: Private]---------------------------------------
         private readonly TypeDefinition     m_target   ;
@@ -431,7 +431,7 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <inherit/>
-        protected override void CopyField (FieldInfo field)
+        protected override FieldDefinition CopyField (FieldInfo field)
         {
             var template = field ;
             var newfield = new FieldDefinition (GetEmitName (field), (Mono.Cecil.FieldAttributes) template.Attributes, GetType (template.FieldType)) ;
@@ -453,12 +453,13 @@ namespace Cil.CompiledTemplates.Cecil
             }
 
             m_dictionary = m_dictionary.Add (template, newfield) ;
+            return newfield ;
         }
 
         /// <inherit/>
-        protected override void CopyMethod (MethodBase method, SR.MethodAttributes set = 0, SR.MethodAttributes clear = 0)
+        protected override MethodDefinition CopyMethod (MethodBase method, SR.MethodAttributes set = 0, SR.MethodAttributes clear = 0)
         {
-            CopyMethodInternal (method, set, clear) ;
+            return CopyMethodInternal (method, set, clear) ;
         }
 
         #region public ILProcessor CreateMethodBuilder (...)

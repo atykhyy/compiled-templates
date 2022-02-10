@@ -23,7 +23,7 @@ namespace Cil.CompiledTemplates.Cecil
     /// The abstract base class for template contexts.
     /// Contains target-agnostic declarations and functionality.
     /// </summary>
-    public abstract class TemplateContextBase
+    public abstract class TemplateContextBase<TField, TMethod>
     {
         #region --[Fields: Private]---------------------------------------
         protected readonly Type m_template ;
@@ -40,10 +40,10 @@ namespace Cil.CompiledTemplates.Cecil
 
         private sealed class DictionaryState : IDisposable
         {
-            private readonly TemplateContextBase                 m_context ;
-            private readonly ImmutableDictionary<object, object> m_state ;
+            private readonly TemplateContextBase<TField, TMethod> m_context ;
+            private readonly ImmutableDictionary<object, object>  m_state ;
 
-            public DictionaryState (TemplateContextBase context)
+            public DictionaryState (TemplateContextBase<TField, TMethod> context)
             {
                 m_context = context ;
                 m_state   = context.m_dictionary ;
@@ -390,101 +390,83 @@ namespace Cil.CompiledTemplates.Cecil
         /// Copies the template field
         /// identified by the lambda expression <paramref name="func"/>.
         /// </summary>
-        public void CopyField<T> (Expression<Func<T>> func)
+        public TField CopyField<T> (Expression<Func<T>> func)
         {
             var mex  = func.Body as MemberExpression ;
             if (mex == null || mex.Member.MemberType != MemberTypes.Field)
                 throw new ArgumentOutOfRangeException (nameof (func)) ;
 
-            CopyField ((FieldInfo) mex.Member) ;
+            return CopyField ((FieldInfo) mex.Member) ;
         }
 
-        protected abstract void CopyField (FieldInfo field) ;
+        protected abstract TField CopyField (FieldInfo field) ;
 
-        #region public void CopyMethod (..., MethodAttributes set = 0, MethodAttributes clear = 0)
+        #region public TMethod CopyMethod (..., MethodAttributes set = 0, MethodAttributes clear = 0)
         /// <summary>
         /// Copies the template method that is the target of the supplied delegate.
         /// </summary>
-        public void CopyMethod<P1, P2, P3, T> (Func<P1, P2, P3, T> d, MethodAttributes set = 0, MethodAttributes clear = 0)
-        {
+        public TMethod CopyMethod<P1, P2, P3, T> (Func<P1, P2, P3, T> d, MethodAttributes set = 0, MethodAttributes clear = 0) =>
             CopyMethod (d.Method, set, clear) ;
-        }
-
-        /// <summary>
-        /// Copies the template method that is the target of the supplied delegate.
-        /// </summary>
-        public void CopyMethod<P1, P2, T> (Func<P1, P2, T> d, MethodAttributes set = 0, MethodAttributes clear = 0)
-        {
-            CopyMethod (d.Method, set, clear) ;
-        }
 
         /// <summary>
         /// Copies the template method that is the target of the supplied delegate.
         /// </summary>
-        public void CopyMethod<P1, T> (Func<P1, T> d, MethodAttributes set = 0, MethodAttributes clear = 0)
-        {
+        public TMethod CopyMethod<P1, P2, T> (Func<P1, P2, T> d, MethodAttributes set = 0, MethodAttributes clear = 0) =>
             CopyMethod (d.Method, set, clear) ;
-        }
 
         /// <summary>
         /// Copies the template method that is the target of the supplied delegate.
         /// </summary>
-        public void CopyMethod<T> (Func<T> d, MethodAttributes set = 0, MethodAttributes clear = 0)
-        {
+        public TMethod CopyMethod<P1, T> (Func<P1, T> d, MethodAttributes set = 0, MethodAttributes clear = 0) =>
             CopyMethod (d.Method, set, clear) ;
-        }
 
         /// <summary>
         /// Copies the template method that is the target of the supplied delegate.
         /// </summary>
-        public void CopyMethod<P1, P2, P3> (Action<P1, P2, P3> d, MethodAttributes set = 0, MethodAttributes clear = 0)
-        {
+        public TMethod CopyMethod<T> (Func<T> d, MethodAttributes set = 0, MethodAttributes clear = 0) =>
             CopyMethod (d.Method, set, clear) ;
-        }
 
         /// <summary>
         /// Copies the template method that is the target of the supplied delegate.
         /// </summary>
-        public void CopyMethod<P1, P2> (Action<P1, P2> d, MethodAttributes set = 0, MethodAttributes clear = 0)
-        {
+        public TMethod CopyMethod<P1, P2, P3> (Action<P1, P2, P3> d, MethodAttributes set = 0, MethodAttributes clear = 0) =>
             CopyMethod (d.Method, set, clear) ;
-        }
 
         /// <summary>
         /// Copies the template method that is the target of the supplied delegate.
         /// </summary>
-        public void CopyMethod<P1> (Action<P1> d, MethodAttributes set = 0, MethodAttributes clear = 0)
-        {
+        public TMethod CopyMethod<P1, P2> (Action<P1, P2> d, MethodAttributes set = 0, MethodAttributes clear = 0) =>
             CopyMethod (d.Method, set, clear) ;
-        }
 
         /// <summary>
         /// Copies the template method that is the target of the supplied delegate.
         /// </summary>
-        public void CopyMethod (Action d, MethodAttributes set = 0, MethodAttributes clear = 0)
-        {
+        public TMethod CopyMethod<P1> (Action<P1> d, MethodAttributes set = 0, MethodAttributes clear = 0) =>
             CopyMethod (d.Method, set, clear) ;
-        }
+
+        /// <summary>
+        /// Copies the template method that is the target of the supplied delegate.
+        /// </summary>
+        public TMethod CopyMethod (Action d, MethodAttributes set = 0, MethodAttributes clear = 0) =>
+            CopyMethod (d.Method, set, clear) ;
         #endregion
 
         /// <summary>
         /// Copies the template method
         /// identified by the lambda expression <paramref name="expr"/>.
         /// </summary>
-        public void CopyMethod_ (Expression<Action> expr, MethodAttributes set = 0, MethodAttributes clear = 0)
+        public TMethod CopyMethod_ (Expression<Action> expr, MethodAttributes set = 0, MethodAttributes clear = 0)
         {
             var fex  = expr.Body as MethodCallExpression ;
             if (fex != null)
             {
-                CopyMethod (GetMethodInType (fex.Method, fex.Object?.Type), set, clear) ;
-                return ;
+                return CopyMethod (GetMethodInType (fex.Method, fex.Object?.Type), set, clear) ;
             }
 
             var nex  = expr.Body as NewExpression ;
             if (nex != null)
             {
-                CopyMethod (nex.Constructor, set, clear) ;
-                return ;
+                return CopyMethod (nex.Constructor, set, clear) ;
             }
 
             throw new ArgumentOutOfRangeException (nameof (expr)) ;
@@ -494,30 +476,30 @@ namespace Cil.CompiledTemplates.Cecil
         /// Copies the template property getter
         /// identified by the lambda expression <paramref name="expr"/>.
         /// </summary>
-        public void CopyGetter_<T> (Expression<Func<T>> expr, MethodAttributes set = 0, MethodAttributes clear = 0)
+        public TMethod CopyGetter_<T> (Expression<Func<T>> expr, MethodAttributes set = 0, MethodAttributes clear = 0)
         {
             var mex  = expr.Body as MemberExpression ;
             if (mex == null || mex.Member.MemberType != MemberTypes.Property)
                 throw new ArgumentOutOfRangeException (nameof (expr)) ;
 
-            CopyMethod (GetMethodInType (((PropertyInfo) mex.Member).GetGetMethod (), mex.Expression?.Type), set, clear) ;
+            return CopyMethod (GetMethodInType (((PropertyInfo) mex.Member).GetMethod, mex.Expression?.Type), set, clear) ;
         }
 
         /// <summary>
         /// Copies the template property setter
         /// identified by the lambda expression <paramref name="expr"/>.
         /// </summary>
-        public void CopySetter_<T> (Expression<Func<T>> expr, MethodAttributes set = 0, MethodAttributes clear = 0)
+        public TMethod CopySetter_<T> (Expression<Func<T>> expr, MethodAttributes set = 0, MethodAttributes clear = 0)
         {
             // limitation: property must have a getter, or expression will not compile
             var mex  = expr.Body as MemberExpression ;
             if (mex == null || mex.Member.MemberType != MemberTypes.Property)
                 throw new ArgumentOutOfRangeException (nameof (expr)) ;
 
-            CopyMethod (GetMethodInType (((PropertyInfo) mex.Member).GetSetMethod (), mex.Expression?.Type), set, clear) ;
+            return CopyMethod (GetMethodInType (((PropertyInfo) mex.Member).SetMethod, mex.Expression?.Type), set, clear) ;
         }
 
-        protected abstract void CopyMethod (MethodBase method, MethodAttributes set, MethodAttributes clear) ;
+        protected abstract TMethod CopyMethod (MethodBase method, MethodAttributes set, MethodAttributes clear) ;
         #endregion
 
         #region --[Methods: Protected]------------------------------------
