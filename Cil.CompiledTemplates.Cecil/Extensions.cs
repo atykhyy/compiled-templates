@@ -308,7 +308,15 @@ namespace Cil.CompiledTemplates.Cecil
         /// </summary>
         public static bool IsVoidReturn (this MethodReference method)
         {
-            return method.ReturnType.SameAs (method.Module.TypeSystem.Void) ;
+            var type = method.ReturnType ;
+
+            // ECMA-335 II.7.1.1 says that custom modifiers have no effect
+            // on the operation of the virtual execution system other than
+            // forcing signatures differing by modifiers to not match
+            while (type.IsOptionalModifier || type.IsRequiredModifier)
+                type = type.GetElementType () ;
+
+            return type.SameAs (type.Module.TypeSystem.Void) ;
         }
 
         /// <summary>
