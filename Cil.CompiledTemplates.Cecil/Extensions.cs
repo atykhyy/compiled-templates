@@ -702,6 +702,9 @@ namespace Cil.CompiledTemplates.Cecil
             if (b == null)
                 return false ;
 
+            if (a.Module != b.Module)
+                throw new ArgumentException () ;
+
             if (a.IsGenericInstance)
             {
                 if (b.IsGenericInstance)
