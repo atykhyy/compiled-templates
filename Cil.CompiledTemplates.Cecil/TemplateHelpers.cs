@@ -97,6 +97,23 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <summary>
+        /// A call to this method is elided when <typeparamref name="T"/>
+        /// is bound to a value type. When it is bound to a reference type,
+        /// the reference flavor of the instruction loading <paramref name="value"/>
+        /// (it must be a local or a parameter) is removed.
+        /// </summary>
+        /// <remarks>
+        /// This method helps to avoid needless duplication of templated
+        /// methods when it is not known beforehand whether the bound type
+        /// is a value or a reference type.
+        /// </remarks>
+        public static ref T InObject<T> (this ref T value)
+            where T : struct
+        {
+            return ref value ;
+        }
+
+        /// <summary>
         /// A call to this method is converted to instructions
         /// casting <paramref name="value"/> to <c>object</c>,
         /// boxing it if <typeparamref name="T"/> is a value type.

@@ -1412,6 +1412,12 @@ namespace Cil.CompiledTemplates.Cecil
                                     continue ;
                                 }
 
+                                if (meth.Name == nameof (TemplateHelpers.InObject))
+                                {
+                                    newinsn.NopOut () ;
+                                    continue ;
+                                }
+
                                 if (meth.Name == nameof (TemplateHelpers.FromObject))
                                 {
                                     newinsn.OpCode  = OpCodes.Unbox_Any ;
@@ -1473,6 +1479,23 @@ namespace Cil.CompiledTemplates.Cecil
                                 {
                                     newinsn.OpCode  = OpCodes.Ldnull ;
                                     newinsn.Operand = null ;
+                                    continue ;
+                                }
+
+                                if (meth.Name == nameof (TemplateHelpers.InObject))
+                                {
+                                    switch (newinsn.Previous.OpCode.Code)
+                                    {
+                                    case Code.Ldarga:   newinsn.Previous.OpCode = OpCodes.Ldarg   ; break ;
+                                    case Code.Ldarga_S: newinsn.Previous.OpCode = OpCodes.Ldarg_S ; break ;
+                                    case Code.Ldloca:   newinsn.Previous.OpCode = OpCodes.Ldloc   ; break ;
+                                    case Code.Ldloca_S: newinsn.Previous.OpCode = OpCodes.Ldloc_S ; break ;
+                                    case Code.Ldflda:   newinsn.Previous.OpCode = OpCodes.Ldfld   ; break ;
+                                    default:
+                                        throw new InvalidOperationException () ;
+                                    }
+
+                                    newinsn.NopOut () ;
                                     continue ;
                                 }
 
