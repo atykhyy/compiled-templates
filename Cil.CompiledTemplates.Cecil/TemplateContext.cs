@@ -1347,8 +1347,8 @@ namespace Cil.CompiledTemplates.Cecil
                         case Code.Ldsfld:  type = ((FieldInfo)     newinsn.Operand).FieldType     ; break ;
                         }
 
-                        // TODO: only static methods for now
-                        newinsn.OpCode  = OpCodes.Ldnull ;
+                        // TODO: instance methods bind to local 'this', whatever it is
+                        newinsn.OpCode  = meth.HasThis ? OpCodes.Ldarg_0 : OpCodes.Ldnull ;
                         newinsn.Operand = null ;
 
                         if (meth != NullMethod)
