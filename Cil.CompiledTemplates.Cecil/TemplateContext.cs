@@ -1177,13 +1177,6 @@ namespace Cil.CompiledTemplates.Cecil
                 // at this point, newinsn.Operand is an "interesting" object:
                 // MemberInfo, ParameterInfo or s_this, and is not null
 
-                // TODO: flow `constrain` along the execution flow
-                if (constrain != null && newinsn.OpCode.Code == Code.Callvirt)
-                {
-                    il.InsertBefore (newinsn, Instruction.Create (OpCodes.Constrained, constrain)) ;
-                    constrain  = null ;
-                }
-
                 // process template bindings
                 object newop ;
                 if (dictionary.TryGetValue (newinsn.Operand, out newop) ||
@@ -1529,6 +1522,13 @@ namespace Cil.CompiledTemplates.Cecil
                     }
                     else
                         throw new InvalidOperationException () ;
+                }
+
+                // TODO: flow `constrain` along the execution flow
+                if (constrain != null && newinsn.OpCode.Code == Code.Callvirt)
+                {
+                    il.InsertBefore (newinsn, Instruction.Create (OpCodes.Constrained, constrain)) ;
+                    constrain  = null ;
                 }
             }
 
