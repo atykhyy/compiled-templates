@@ -593,6 +593,80 @@ namespace Cil.CompiledTemplates.Cecil
         }
 
         /// <summary>
+        /// Backs out execution stack depth change due to <paramref name="insn"/>
+        /// if possible.
+        /// </summary>
+        public static bool TryBackOutStackBehavior (this Instruction insn, ref int stack)
+        {
+            switch (insn.OpCode.StackBehaviourPush)
+            {
+            case StackBehaviour.Push0:
+                break ;
+            case StackBehaviour.Push1:
+            case StackBehaviour.Pushi:
+            case StackBehaviour.Pushi8:
+            case StackBehaviour.Pushr4:
+            case StackBehaviour.Pushr8:
+            case StackBehaviour.Pushref:
+                stack -= 1 ;
+                break ;
+            case StackBehaviour.Push1_push1:
+                stack -= 2 ;
+                break ;
+            case StackBehaviour.Varpush:
+                var method = (MethodReference) insn.Operand ;
+                if(!method.IsVoidReturn ())
+                    stack-- ;
+
+                break ;
+            default:
+                throw new InvalidOperationException () ; // not reached
+            }
+
+            switch (insn.OpCode.StackBehaviourPop)
+            {
+            case StackBehaviour.Pop0:
+                break ;
+            case StackBehaviour.Popi:
+            case StackBehaviour.Pop1:
+            case StackBehaviour.Popref:
+                stack += 1 ;
+                break ;
+            case StackBehaviour.Popi_pop1:
+            case StackBehaviour.Popi_popi:
+            case StackBehaviour.Pop1_pop1:
+            case StackBehaviour.Popi_popi8:
+            case StackBehaviour.Popi_popr4:
+            case StackBehaviour.Popi_popr8:
+            case StackBehaviour.Popref_pop1:
+            case StackBehaviour.Popref_popi:
+                stack += 2 ;
+                break ;
+            case StackBehaviour.Popi_popi_popi:
+            case StackBehaviour.Popref_popi_popi:
+            case StackBehaviour.Popref_popi_popi8:
+            case StackBehaviour.Popref_popi_popr4:
+            case StackBehaviour.Popref_popi_popr8:
+            case StackBehaviour.Popref_popi_popref:
+                stack += 3 ;
+                break ;
+            case StackBehaviour.Varpop:
+                var method = (MethodReference) insn.Operand ;
+                if (method.HasThis && insn.OpCode.Code != Code.Newobj)
+                    stack++ ;
+
+                stack += method.Parameters.Count ;
+                break ;
+            case StackBehaviour.PopAll:
+                return false ;
+            default:
+                throw new InvalidOperationException () ; // not reached
+            }
+
+            return true ;
+        }
+
+        /// <summary>
         /// Simplifies branch instruction macros (Brxxx_S) in <paramref name="il"/> to full forms.
         /// </summary>
         public static void SimplifyBranchMacros (this ILProcessor il)

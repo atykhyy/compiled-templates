@@ -820,75 +820,12 @@ namespace Cil.CompiledTemplates.Cecil
                         insnLeft  = insnLeft.Previous ;
 
                         // compute IL stack balance going backwards
-                        #region switch (insnRight.OpCode.StackBehaviourPush)
-                        switch (insnRight.OpCode.StackBehaviourPush)
+                        if (!insnRight.TryBackOutStackBehavior (ref stack))
                         {
-                        case StackBehaviour.Push0:
-                            break ;
-                        case StackBehaviour.Push1:
-                        case StackBehaviour.Pushi:
-                        case StackBehaviour.Pushi8:
-                        case StackBehaviour.Pushr4:
-                        case StackBehaviour.Pushr8:
-                        case StackBehaviour.Pushref:
-                            stack -= 1 ;
-                            break ;
-                        case StackBehaviour.Push1_push1:
-                            stack -= 2 ;
-                            break ;
-                        case StackBehaviour.Varpush:
-                            var method = (MethodReference) insnRight.Operand ;
-                            if(!method.IsVoidReturn ())
-                                stack-- ;
-
-                            break ;
-                        default:
-                            throw new InvalidOperationException () ; // not reached
-                        }
-                        #endregion
-                        #region switch (insnRight.OpCode.StackBehaviourPop)
-                        switch (insnRight.OpCode.StackBehaviourPop)
-                        {
-                        case StackBehaviour.Pop0:
-                            break ;
-                        case StackBehaviour.Popi:
-                        case StackBehaviour.Pop1:
-                        case StackBehaviour.Popref:
-                            stack += 1 ;
-                            break ;
-                        case StackBehaviour.Popi_pop1:
-                        case StackBehaviour.Popi_popi:
-                        case StackBehaviour.Pop1_pop1:
-                        case StackBehaviour.Popi_popi8:
-                        case StackBehaviour.Popi_popr4:
-                        case StackBehaviour.Popi_popr8:
-                        case StackBehaviour.Popref_pop1:
-                        case StackBehaviour.Popref_popi:
-                            stack += 2 ;
-                            break ;
-                        case StackBehaviour.Popi_popi_popi:
-                        case StackBehaviour.Popref_popi_popi:
-                        case StackBehaviour.Popref_popi_popi8:
-                        case StackBehaviour.Popref_popi_popr4:
-                        case StackBehaviour.Popref_popi_popr8:
-                        case StackBehaviour.Popref_popi_popref:
-                            stack += 3 ;
-                            break ;
-                        case StackBehaviour.Varpop:
-                            var method = (MethodReference) insnRight.Operand ;
-                            if (method.HasThis && insnRight.OpCode.Code != Code.Newobj)
-                                stack++ ;
-
-                            stack += method.Parameters.Count ;
-                            break ;
-                        case StackBehaviour.PopAll:
                             // only `leave` has this behavior
                             simple = false ;
                             goto spill ;
-                        default:
-                            throw new InvalidOperationException () ; // not reached
                         }
-                        #endregion
 
                         if (!spill)
                         {
