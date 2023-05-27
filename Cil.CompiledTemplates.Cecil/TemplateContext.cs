@@ -1227,6 +1227,11 @@ namespace Cil.CompiledTemplates.Cecil
                         case Code.Stsfld:  break ;
                         default:           throw new InvalidOperationException () ;
                         }
+
+                        if (newinsn.Operand is FieldInfo finfo && !finfo.IsStatic && !finfo.DeclaringType.IsValueType && field.DeclaringType.IsValueType)
+                        {
+                            FixUpValueTypeReceiver (newinsn, newinsn.OpCode.Code == Code.Stfld ? 2 : 1) ;
+                        }
                     }
                     else
                     if ((vd = newop as VariableDefinition) != null) // is this ever useful?
@@ -1301,6 +1306,14 @@ namespace Cil.CompiledTemplates.Cecil
                     {
                         if (meth.Module  != m_target.Module)
                             newop         = m_target.Module.ImportReference (meth) ;
+
+                        if (newinsn.Operand is MethodBase minfo && !minfo.IsStatic && !minfo.DeclaringType.IsValueType && meth.HasThis && meth.DeclaringType.IsValueType)
+                        {
+                            if (newinsn.OpCode.Code == Code.Callvirt)
+                                newinsn.OpCode = OpCodes.Call ;
+
+                            FixUpValueTypeReceiver (newinsn, meth.Parameters.Count + 1) ;
+                        }
                     }
 
                     newinsn.Operand = newop ;
@@ -1599,6 +1612,22 @@ namespace Cil.CompiledTemplates.Cecil
             if (gmta != null) AddQuasiGenericParameters (method,               gmta, scope) ;
             if (gtta != null) AddQuasiGenericParameters (method.DeclaringType, gtta, scope) ;
             return scope ;
+        }
+
+        private void FixUpValueTypeReceiver (Instruction newinsn, int receiverDepth)
+        {
+            // extremely limited support of emitting method calls and field accesses
+            // with reference-type template receivers bound to value-type targets
+            for (var insn = newinsn.Previous ; insn.TryBackOutStackBehavior (ref receiverDepth) ; insn = insn.Previous)
+            {
+                if (receiverDepth == 0)
+                {
+                    if (insn.OpCode.Code == Code.Ldarg && !((ParameterDefinition) insn.Operand).ParameterType.IsByReference)
+                        insn.OpCode = OpCodes.Ldarga ;
+
+                    break ;
+                }
+            }
         }
 
         private void AddQuasiGenericParameters (MemberInfo context, Type[] types, ScopeDebugInformation scope)
