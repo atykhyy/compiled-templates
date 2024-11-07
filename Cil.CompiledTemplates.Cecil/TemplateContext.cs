@@ -1539,7 +1539,8 @@ namespace Cil.CompiledTemplates.Cecil
             {
                 il.Body.ExceptionHandlers.Add (new ExceptionHandler ((ExceptionHandlerType) eh.Flags)
                 {
-                    CatchType    = GetType (eh.CatchType),
+                    CatchType    = eh.Flags.HasFlag (ExceptionHandlingClauseOptions.Finally) ||
+                                   eh.Flags.HasFlag (ExceptionHandlingClauseOptions.Filter) ? null : GetType (eh.CatchType),
                     TryStart     = insns[eh.TryOffset],
                     TryEnd       = insns[eh.TryOffset + eh.TryLength],
                     FilterStart  = eh.Flags.HasFlag (ExceptionHandlingClauseOptions.Filter) ?
